@@ -9,6 +9,15 @@ engine. Works with the agent completely off.
 and folder mappings are yours, regenerated on your machine by the [INSTALL.md](INSTALL.md)
 bootstrap. Several files are explicitly marked `EDIT:` templates.
 
+## Compatibility
+
+**Claude Code only, for now.** The engine is agent-agnostic bash, but the wiring that makes
+the system automatic — the SessionStart digest hook, the discovery trigger rows, the
+agent-run install — is built and tested against Claude Code (CLI, desktop app, or IDE
+extension), on macOS. The full honest matrix (Claude Desktop's degraded path, Codex CLI
+status, Windows/WSL, the exhaustive macOS-only list) is in
+[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+
 ## Architecture
 
 ```mermaid
@@ -69,6 +78,16 @@ honestly say "not in the brain" instead of guessing.
 | `templates/` | MAP skeleton + discovery-hook trigger rows |
 | `install.sh` / `verify-install.sh` | one-command bootstrap + machine-checked acceptance gates |
 
+## Documentation
+
+| Doc | What's in it |
+|---|---|
+| [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) | the deep walkthrough: index anatomy (index.tsv, fts.db, extracts), the read-less-first search ladder with real commands, the labeling misc-trap, why the doctrine exists |
+| [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | full platform matrix: agent platforms, operating systems, the exhaustive macOS-only list, dependencies |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | sandbox-tested failure modes: installer refusals, verify-install output interpretation, empty search results, labeling and refresh pitfalls |
+| [DOCTRINE.md](DOCTRINE.md) | the agent-side access doctrine — the behavioral half, loaded into your agent's context |
+| [INSTALL.md](INSTALL.md) | the hybrid bootstrap: install.sh does the deterministic work, one agent step authors your taxonomy |
+
 ## Use cases
 
 - You keep notes as plain files (Markdown, PDFs, docx) scattered across real folders and want
@@ -104,11 +123,14 @@ honestly say "not in the brain" instead of guessing.
 
 ## Portability
 
+Claude Code is the supported and tested target today; everything below is the honest
+future-portability story (details and per-platform status: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)).
+
 - **Engine:** any machine with bash, ripgrep, and sqlite3 (macOS out of the box; note
   `ls -lO`-based iCloud-offload detection is macOS-specific — harmless elsewhere).
-- **Agent:** any model that can run shell commands can drive the full ladder — Claude Code,
-  Codex-style CLIs, open-weights models in an agent harness. `DOCTRINE.md` is plain markdown;
-  paste it into any agent's context.
+- **Agent:** any model that can run shell commands can in principle drive the full ladder —
+  Codex-style CLIs, open-weights models in an agent harness (untested). `DOCTRINE.md` is
+  plain markdown; paste it into any agent's context.
 - **Claude Code-specific:** only the SessionStart digest hook wiring
   (`register-digest-hook.sh`) and the discovery-hook trigger rows in `templates/`. The
   *pattern* (prime each session with a bounded map + access line) ports to any harness with
