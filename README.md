@@ -1,4 +1,4 @@
-# NewBrain — a no-copy second brain for AI agents
+# NewBrain — a no-copy second brain for LLM & AI agents
 
 A personal knowledge index that lets an AI agent (Claude Code or any model that can run bash)
 search, read, and honestly abstain over YOUR notes — without moving, copying, or converting a
