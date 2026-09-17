@@ -1,5 +1,9 @@
 # INSTALL — hybrid bootstrap
 
+For a complete AI-executable migration from no existing brain or from Obsidian, read
+[docs/MIGRATION.md](docs/MIGRATION.md) first. It defines the backup, verification, and
+explicit-approval gates; this file is the installation procedure referenced by that guide.
+
 Install is **hybrid**: one shell script does everything deterministic, and an agent step
 handles the one thing that genuinely needs judgment — your room taxonomy. Steps marked
 **[no LLM needed]** are plain shell you can run yourself.
