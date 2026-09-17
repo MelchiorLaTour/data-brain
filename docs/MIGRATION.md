@@ -2,7 +2,9 @@
 
 This document is written for an AI agent executing the migration. The agent must preserve
 the user's original files, avoid destructive actions until verification succeeds, and report
-each acceptance check as PASS or BLOCKED.
+each acceptance check as PASS or BLOCKED. A strong planning model should create the plan from
+the inventory; smaller execution models should perform the deterministic shell steps and
+record evidence. No model should silently invent labels, links, or test answers.
 
 ## What NewBrain is
 
@@ -60,6 +62,90 @@ Use this route when the user has files but no existing second-brain index.
 - At least one known note is returned by `bin/fts.sh`.
 - The agent searches before answering questions about the user's notes.
 - The agent says `not in the brain` when the result is weak or absent instead of guessing.
+
+## Full setup, relationship pass, and recall gate
+
+Installation is not complete when `moc/fts.db` exists. The agent must run the following
+phases in order. The planning model may adjust the order after inspecting the inventory, but
+the acceptance gates and the four recall strata must not be skipped.
+
+### Phase 1 — inventory (planner model)
+
+1. Enumerate every selected root and count files by extension and directory.
+2. Exclude secrets, caches, generated indexes, and unsupported application state.
+3. Produce a short plan naming the roots, expected file count, proposed rooms, and any
+   formats that need extraction.
+4. Ask the user only about unresolved ownership or taxonomy decisions. Do not ask a model to
+   guess what a personal folder means.
+
+### Phase 2 — deterministic ingestion (executor models)
+
+1. Run `install.sh` or `refresh.sh` to ingest every approved root.
+2. Run extraction for supported PDF/DOCX/offloaded files.
+3. Label, rebuild rooms, and rebuild FTS5.
+4. Run `verify-install.sh` and save its output as the phase evidence.
+5. If the indexed count differs from the inventory, stop and report the missing paths; do not
+   continue by silently lowering the scope.
+
+### Phase 3 — relationship/linking pass (executor models)
+
+NewBrain's safe relationship layer is deterministic metadata, not an opaque semantic graph.
+For each indexed file, preserve its canonical path, room, title, keywords, explicit Markdown
+links, and duplicate/conflict status. Build relationships only from evidence such as an
+explicit link, the same canonical path family, a confirmed duplicate, or a shared user-approved
+room. Shared keywords alone are not proof that two files contain the same information.
+
+The planner model reviews a relationship report; executor models run the scripts and validate
+counts. Conflicts are reported for human review. No relationship pass may rewrite or merge
+canonical notes.
+
+### Phase 4 — recall acceptance exam (judge model)
+
+Create a private query fixture with the same four strata every time. Start from
+[`templates/RECALL-TESTS.tsv`](../templates/RECALL-TESTS.tsv), then keep the populated fixture
+outside the public repository because it contains personal paths and answers.
+
+| Stratum | Required contents |
+|---|---|
+| Easy | direct wording whose answer file is known |
+| Medium | paraphrased wording with several answer-bearing files |
+| Hard | indirect wording, distractors, and competing notes |
+| XLING | equivalent questions and answers across languages |
+
+Each query row must contain an ID, stratum, question, expected answer path(s), and a trap flag
+when the answer is intentionally absent. The fixture must be held out from tuning. Score
+answer-bearing recall at rank 3 separately for Easy, Medium, Hard, and XLING; score trap
+honesty separately. Never replace these rows with one blended percentage.
+
+The recommended acceptance bars are Easy 100%, Medium 100%, Hard at least 32/40 (80%), and
+XLING at least 16/20 (80%), plus honest abstention on every valid trap. If a project uses
+different denominators, record them before running the exam and keep them unchanged between
+versions.
+
+The judge model labels whether a returned path is answer-bearing. Lower-cost executor models
+may run queries, collect ranked paths, and calculate scores, but they must not change labels or
+quietly drop failures. A failed gate returns to diagnosis; it does not become a PASS because
+the total file count looks correct.
+
+### Efficient model allocation
+
+1. Use one high-capability planning model for inventory interpretation, taxonomy proposals,
+   test-fixture design, and final audit.
+2. Use lower-cost models or shell workers for repetitive ingestion, extraction, relationship
+   counting, query execution, and report assembly.
+3. Use a separate judge model for recall labels so the planner is not grading its own guesses.
+4. Cache inventory and extraction results. Re-run only changed roots or failed phases.
+5. Stop early when a gate fails for a structural reason (missing root, unreadable file, absent
+   expected path); repair the cause before spending time on more queries.
+
+### Time expectations
+
+These are planning estimates, not performance guarantees. A new installation commonly needs
+roughly a couple of hours because it includes inventory, taxonomy decisions, extraction,
+relationship review, and the first recall exam. An Obsidian migration can often fit in roughly
+30 minutes when the vault is already clean and the backup, root selection, and representative
+query set are ready. The agent must report measured wall time after each phase rather than
+claiming the estimate was achieved.
 
 ## Route B — migrating from Obsidian
 

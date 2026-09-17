@@ -87,7 +87,7 @@ honestly say "not in the brain" instead of guessing.
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | sandbox-tested failure modes: installer refusals, verify-install output interpretation, empty search results, labeling and refresh pitfalls |
 | [DOCTRINE.md](DOCTRINE.md) | the agent-side access doctrine — the behavioral half, loaded into your agent's context |
 | [INSTALL.md](INSTALL.md) | the hybrid bootstrap: install.sh does the deterministic work, one agent step authors your taxonomy |
-| [docs/MIGRATION.md](docs/MIGRATION.md) | AI-readable instructions for starting from no brain or migrating from Obsidian safely |
+| [docs/MIGRATION.md](docs/MIGRATION.md) | AI-readable setup, relationship pass, four-stratum recall gate, and safe Obsidian migration |
 
 ## Use cases
 

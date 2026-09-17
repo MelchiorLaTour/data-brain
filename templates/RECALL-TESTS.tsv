@@ -1,0 +1,7 @@
+# id\tstratum\ttrap\tquestion\texpected_path_1\texpected_path_2
+# Replace this template with a private, held-out fixture. Do not commit personal paths.
+E-001\teasy\t0\t<direct question>\t<absolute answer path>\t
+M-001\tmedium\t0\t<paraphrased question>\t<absolute answer path>\t
+H-001\thard\t0\t<indirect question>\t<absolute answer path>\t<second acceptable path>
+X-001\txling\t0\t<cross-language question>\t<absolute answer path>\t
+T-001\thard\t1\t<question whose answer is absent>\t\t
