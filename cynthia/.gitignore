@@ -1,7 +1,0 @@
-__pycache__/
-*.pyc
-AUDIT-RECEIPT-*.json
-SETUP-RECEIPT-*.json
-E2E-RECEIPT-*.json
-routing.jsonl
-fixtures/newbrain-eval-v3.results.json

@@ -1,7 +1,0 @@
-{
-  "orchestrator": "terra",
-  "private_worker": "luna",
-  "third_party_providers": [],
-  "routing_mode": "native_only",
-  "graders": ["terra", "sol", "opus-4.8", "opus-5"]
-}

@@ -26,8 +26,8 @@ prompt-triggered discovery — not the core search-and-abstain capability.
 | OS | Status | Notes |
 |---|---|---|
 | **macOS** | ✅ Supported, live-tested | Development and test platform (stock bash 3.2, BSD awk — both explicitly supported). |
-| **Linux** | 🔶 Should work, untested | Engine is POSIX-portable bash + `rg` + `sqlite3`. The macOS-only bits below degrade gracefully or need a swap. |
-| **Windows — WSL** | 🔶 Should work, code-read only | All scripts are POSIX; the macOS-specific calls are optional-skip or have fallbacks (see below). Replace the launchd nightly job with a cron entry. Nobody has run this live. |
+| **Linux** | ⚠️ Not yet supported | Current scripts include BSD `stat`/`date` calls that need portability fixes. |
+| **Windows — WSL** | ⚠️ Planned | WSL is the first Microsoft target after those portability fixes and a real WSL acceptance run. |
 | **Windows — Git Bash** | ⚠️ Not recommended | No `sqlite3` bundled, converter tooling patchy. Use WSL instead. |
 | **Windows — native (cmd/PowerShell)** | ❌ No | Everything is bash. |
 
@@ -42,7 +42,8 @@ prompt-triggered discovery — not the core search-and-abstain capability.
 - `mdfind` (Spotlight fallback mentioned in DOCTRINE.md routing) — macOS-only; use
   `locate`/`fd` or skip.
 
-Nothing else in `bin/` is platform-specific.
+The current BSD `stat`/`date` calls in the search, refresh, recent, and index
+paths are also platform-specific; `MICROSOFT.md` tracks the required fixes.
 
 ## Dependencies
 

@@ -20,6 +20,10 @@ status, Windows/WSL, the exhaustive macOS-only list) is in
 
 ## Architecture
 
+## Use visualization
+
+![Use visualization](docs/assets/use-visualization.png)
+
 ```mermaid
 flowchart LR
     subgraph roots["Canonical roots (bin/canon.sh)"]
