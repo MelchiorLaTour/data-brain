@@ -1,6 +1,6 @@
 # How it works
 
-NewBrain solves one problem: an AI agent that answers questions about *your* notes without
+Data Brain solves one problem: an AI agent that answers questions about *your* notes without
 ever looking at them. The fix has two halves — a mechanical half (an index the agent can
 search in milliseconds, with the agent completely off) and a behavioral half (a doctrine
 that tells the agent when to search, how to phrase queries, and when to honestly say "not

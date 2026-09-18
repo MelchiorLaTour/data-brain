@@ -6,7 +6,7 @@ bash) follows when querying the brain. It is the other half of the system — th
 trust a hit, and when to honestly say "not in the brain."* Load it into the agent's context
 (as a sector file, a CLAUDE.md import, or pasted doctrine) on any session that touches notes.
 
-NewBrain is a search-and-map layer over notes that live elsewhere (no copies, ever):
+Data Brain is a search-and-map layer over notes that live elsewhere (no copies, ever):
 an index (`moc/index.tsv`), pure bash + ripgrep + sqlite, zero model/API calls — works cold.
 
 ## What it is

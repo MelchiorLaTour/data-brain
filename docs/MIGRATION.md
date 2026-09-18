@@ -1,4 +1,4 @@
-# Migration guide — from no brain or Obsidian to NewBrain
+# Migration guide — from no brain or Obsidian to Data Brain
 
 This document is written for an AI agent executing the migration. The agent must preserve
 the user's original files, avoid destructive actions until verification succeeds, and report
@@ -6,17 +6,17 @@ each acceptance check as PASS or BLOCKED. A strong planning model should create 
 the inventory; smaller execution models should perform the deterministic shell steps and
 record evidence. No model should silently invent labels, links, or test answers.
 
-## What NewBrain is
+## What Data Brain is
 
-NewBrain is a local, no-copy access layer over ordinary files. The user's Markdown, PDF,
-DOCX, and other note files remain in their existing folders. NewBrain creates a rebuildable
+Data Brain is a local, no-copy access layer over ordinary files. The user's Markdown, PDF,
+DOCX, and other note files remain in their existing folders. Data Brain creates a rebuildable
 index and SQLite FTS5 search database under `moc/`; it does not become the canonical owner of
 the notes. The engine makes no network calls and does not require a model to search.
 
 The safe mental model is:
 
 ```text
-canonical note files -> NewBrain index -> ranked search -> agent reads the original file
+canonical note files -> Data Brain index -> ranked search -> agent reads the original file
 ```
 
 The index can be deleted and rebuilt. The canonical notes are the valuable data.
@@ -89,7 +89,7 @@ the acceptance gates and the four recall strata must not be skipped.
 
 ### Phase 3 — relationship/linking pass (executor models)
 
-NewBrain's safe relationship layer is deterministic metadata, not an opaque semantic graph.
+Data Brain's safe relationship layer is deterministic metadata, not an opaque semantic graph.
 For each indexed file, preserve its canonical path, room, title, keywords, explicit Markdown
 links, and duplicate/conflict status. Build relationships only from evidence such as an
 explicit link, the same canonical path family, a confirmed duplicate, or a shared user-approved
@@ -149,8 +149,8 @@ claiming the estimate was achieved.
 
 ## Route B — migrating from Obsidian
 
-Obsidian is not required by NewBrain. Obsidian stores a vault of files and adds a graphical
-editing/linking layer; NewBrain uses the files directly and adds deterministic indexing,
+Obsidian is not required by Data Brain. Obsidian stores a vault of files and adds a graphical
+editing/linking layer; Data Brain uses the files directly and adds deterministic indexing,
 ranked retrieval, refresh, and an agent doctrine. The migration is therefore a change of
 access layer, not a conversion into a proprietary database.
 
@@ -158,23 +158,23 @@ access layer, not a conversion into a proprietary database.
 
 1. Close Obsidian so it is not changing files during the migration.
 2. Make a complete backup of the Obsidian vault, including hidden files such as `.obsidian/`.
-3. Keep the backup until the user has completed several successful NewBrain searches and
+3. Keep the backup until the user has completed several successful Data Brain searches and
    explicitly approves disposal of Obsidian data.
 4. Treat Markdown files as canonical. Do not delete `.md` files, attachments, or the vault
    backup during installation.
 
-### Install NewBrain over the vault
+### Install Data Brain over the vault
 
 1. Configure the Obsidian vault directory as a canonical root in `bin/canon.sh` through
    `./install.sh`.
-2. Decide whether attachments should be indexed. Keep binary attachments in place; NewBrain
+2. Decide whether attachments should be indexed. Keep binary attachments in place; Data Brain
    may create derived text sidecars for supported formats.
 3. Run the Route A procedure from Step 4 onward: build, verify, propose labels, label, rebuild,
    load the doctrine, and run known-note searches.
 4. Test representative notes from every important vault area, including a note with links,
    a note with tags, and a note containing an attachment reference.
 5. If Obsidian wikilinks or graph navigation are still needed, keep Obsidian installed while
-   evaluating NewBrain. NewBrain does not depend on Obsidian and does not reproduce every GUI
+   evaluating Data Brain. Data Brain does not depend on Obsidian and does not reproduce every GUI
    feature.
 
 ### Safe Obsidian retirement
@@ -183,27 +183,27 @@ Deleting Obsidian is optional, not a technical requirement. Retire it only when 
 following are true:
 
 1. The vault backup exists and can be opened or restored.
-2. NewBrain's `verify-install.sh` passes.
+2. Data Brain's `verify-install.sh` passes.
 3. Representative searches return the expected original files.
 4. The user has decided that Obsidian's editor, graph, plugins, and wikilink UI are no longer
    needed.
 5. The user explicitly approves deleting the Obsidian application and/or the local vault.
 
 If approved, remove the Obsidian application separately from the vault. Do not delete the
-vault merely because NewBrain was installed. If the vault itself is retired, archive it or
+vault merely because Data Brain was installed. If the vault itself is retired, archive it or
 move it to a user-approved backup location first, then verify that the canonical files now
-used by NewBrain are intact. Never use a wildcard delete against the user's home directory.
+used by Data Brain are intact. Never use a wildcard delete against the user's home directory.
 
 ### Why a user may retire Obsidian
 
-- NewBrain can search the existing files without a second proprietary workspace.
+- Data Brain can search the existing files without a second proprietary workspace.
 - The engine is model-free, local, and rebuildable.
 - The agent receives one deterministic search-and-abstain path instead of relying on a GUI
   being open.
 - Removing an unused application reduces duplicated indexing and maintenance.
 
 These are operational reasons, not a claim that Obsidian is universally inferior. If the
-user still values Obsidian's editing or graph features, keep it and use NewBrain alongside it.
+user still values Obsidian's editing or graph features, keep it and use Data Brain alongside it.
 
 ## Non-negotiable migration rules for agents
 

@@ -1,6 +1,6 @@
 # Compatibility
 
-**NewBrain is a Claude Code system for now.** The engine in `bin/` is agent-agnostic pure
+**Data Brain is a Claude Code system for now.** The engine in `bin/` is agent-agnostic pure
 bash, but everything that makes the system *feel* automatic — the SessionStart digest hook,
 the discovery-hook trigger rows, the INSTALL.md agent bootstrap — is built and tested
 against Claude Code. Other platforms range from "degraded but usable" to "not possible";

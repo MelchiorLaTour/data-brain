@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "project_id": "replace-with-project-id",
+  "project_root": ".",
+  "context": [
+    {
+      "name": "project-instructions",
+      "path": "CLAUDE.md",
+      "required": true
+    },
+    {
+      "name": "project-facts",
+      "path": "FACTS.md",
+      "required": true
+    }
+  ],
+  "required_files": [
+    {
+      "name": "project-instructions",
+      "path": "CLAUDE.md",
+      "required": true
+    },
+    {
+      "name": "project-facts",
+      "path": "FACTS.md",
+      "required": true
+    }
+  ],
+  "sectors": [
+    {
+      "name": "coding",
+      "source": "~/Claude/sectors/coding.md",
+      "required": true
+    }
+  ],
+  "newbrain": {
+    "root": "~/Claude/NewBrain",
+    "freshness_file": "moc/fts.db",
+    "max_age_seconds": 86400,
+    "required": true
+  },
+  "refresh_command": ["bash", "~/Claude/NewBrain/bin/refresh.sh", "manual"],
+  "setup_commands": [],
+  "recall_fixture": {
+    "path": "research/recall-fixture.json"
+  },
+  "allowed_routes": ["codex-luna"],
+  "data_class": "mel_content",
+  "approvals": {
+    "taxonomy": "required",
+    "obsidian_retirement": "explicit"
+  },
+  "receipt_fields": [
+    "status",
+    "states",
+    "issues",
+    "context_proofs",
+    "privacy"
+  ]
+}
