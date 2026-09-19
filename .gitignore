@@ -1,0 +1,6 @@
+# Per-run install progress, written by install.sh and by the agent following INSTALL.md.
+INSTALL-STATE.md
+
+# NOTE: moc/ is deliberately NOT ignored here. install.sh writes moc/.gitignore inside the
+# folder it generates, so the ignore travels with the artifact and explains itself — and
+# anyone deliberately syncing their index between machines can still `git add -f moc/`.

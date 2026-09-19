@@ -18,4 +18,4 @@ sqlite3 :memory: "CREATE VIRTUAL TABLE t USING fts5(x);" >/dev/null 2>&1 || {
   echo "sqlite3 is present but lacks FTS5 support." >&2
   exit 1
 }
-exec bash "$ROOT/install.sh"
+exec bash "$ROOT/install.sh" "$@"

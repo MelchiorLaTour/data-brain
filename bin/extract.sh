@@ -104,6 +104,7 @@ while IFS=$'\t' read -r path title themes keywords; do
   if [ "$FORCE" -eq 0 ] && [ -s "$out" ]; then skipped_fresh=$((skipped_fresh+1)); continue; fi
   [ "$LIMIT" -gt 0 ] && [ "$processed" -ge "$LIMIT" ] && break
   processed=$((processed+1))
+  [ $((processed % 25)) -eq 0 ] && echo "  ...$processed files done"
 
   was_off=0; if is_offloaded "$f"; then was_off=1; downloaded=$((downloaded+1)); fi  # read below auto-downloads
   text="$(extract_text "$f" "$ext")"

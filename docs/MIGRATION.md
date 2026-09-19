@@ -6,6 +6,19 @@ each acceptance check as PASS or BLOCKED. A strong planning model should create 
 the inventory; smaller execution models should perform the deterministic shell steps and
 record evidence. No model should silently invent labels, links, or test answers.
 
+## Which route you actually need
+
+**Phases 1-2 are the install. Phases 3-4 are an optional acceptance program** for people who
+need a measured recall number before they trust the thing — a team rollout, a migration someone
+has to sign off, a comparison between two index versions.
+
+**A personal install is complete after Phase 2**, `verify-install.sh` passing, and ten queries
+you already know the answer to. Skipping Phases 3-4 costs you exactly one thing: no measured
+recall figure, so treat a `⚠ WEAK MATCH` as a genuine "not in the brain" rather than assuming
+coverage you never measured.
+
+Nothing below is removed by this. Read on if you want the full program.
+
 ## What Data Brain is
 
 Data Brain is a local, no-copy access layer over ordinary files. The user's Markdown, PDF,

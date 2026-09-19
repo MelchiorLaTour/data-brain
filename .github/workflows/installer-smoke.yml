@@ -1,0 +1,50 @@
+name: Installer smoke
+
+# macOS only, deliberately: that is stock bash 3.2, which is what the scripts target.
+# GitHub runners have no terminal attached, so this also exercises the no-TTY flag path
+# for free on every change.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  install-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install ripgrep
+      - name: build a throwaway corpus
+        run: |
+          mkdir -p "$RUNNER_TEMP/notes/Career" "$RUNNER_TEMP/notes/Recipes"
+          printf '# Kubernetes deployment notes\n\nrolling updates.\n' > "$RUNNER_TEMP/notes/Career/deployment.md"
+          printf '# Sourdough starter\n\nhydration ratio.\n' > "$RUNNER_TEMP/notes/Recipes/sourdough.md"
+      - name: preflight
+        run: bash verify-install.sh --preflight "$RUNNER_TEMP/notes"
+      - name: install with no terminal attached
+        run: ./install.sh --roots "$RUNNER_TEMP/notes" --no-extract
+      - name: verify
+        run: |
+          bash verify-install.sh | tee /tmp/verify.out
+          if grep -q '^FAIL' /tmp/verify.out; then
+            echo "verify-install reported a FAIL"; exit 1
+          fi
+      - name: no roots and no terminal must exit 2, not hang
+        run: |
+          set +e
+          ./install.sh > /tmp/noroots.out 2>&1
+          code=$?
+          set -e
+          cat /tmp/noroots.out
+          [ "$code" -eq 2 ] || { echo "expected exit 2, got $code"; exit 1; }
+          grep -q -- '--obsidian' /tmp/noroots.out || { echo "error message should name the flags"; exit 1; }
+      - name: suggest must not mutate the index
+        run: |
+          before="$(shasum moc/index.tsv | awk '{print $1}')"
+          bash bin/label-by-path.sh --suggest
+          bash bin/label-by-path.sh --suggest 3
+          after="$(shasum moc/index.tsv | awk '{print $1}')"
+          [ "$before" = "$after" ] || { echo "--suggest modified moc/index.tsv"; exit 1; }
+      - name: syntax check every script
+        run: for f in install.sh verify-install.sh bin/*.sh windows/*.sh; do bash -n "$f" || exit 1; done
