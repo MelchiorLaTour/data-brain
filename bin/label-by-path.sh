@@ -17,7 +17,7 @@
 # could never take effect. Keep the default '-' until your mapping is genuinely complete.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-INDEX="$ROOT/moc/index.tsv"
+INDEX="${NB_MOC_DIR:-$ROOT/moc}/index.tsv"
 [ -s "$INDEX" ] || { echo "error: $INDEX missing/empty" >&2; exit 1; }
 
 tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT

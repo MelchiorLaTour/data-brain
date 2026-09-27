@@ -3,7 +3,8 @@
 # Checks: (1) dead paths (file moved/deleted), (2) unlabeled rows (themes='-'), (3) duplicate titles.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-INDEX="$ROOT/moc/index.tsv"
+MOC="${NB_MOC_DIR:-$ROOT/moc}"
+INDEX="$MOC/index.tsv"
 [ -s "$INDEX" ] || { echo "error: $INDEX missing/empty" >&2; exit 1; }
 dead=0; unlabeled=0; total=0
 echo "# NewBrain index lint — $(date '+%Y-%m-%d %H:%M')"; echo ""
@@ -21,7 +22,7 @@ echo ""; echo "## Duplicate titles (same title, multiple rows)"
 dup="$(cut -f2 "$INDEX" | grep -v '^#' | sort | uniq -d)"
 if [ -n "$dup" ]; then printf '%s\n' "$dup" | sed 's/^/- /'; else echo "_none_"; fi
 echo ""; echo "## Stale wikis (compiled wiki older than its room's current index)"
-stale="$("$ROOT/bin/stale-wikis.sh" 2>/dev/null)"
+stale="$(NB_MOC_DIR="$MOC" "$ROOT/bin/stale-wikis.sh" 2>/dev/null)"
 if [ -n "$stale" ]; then printf '%s\n' "$stale"; else echo "_none_"; fi
 echo ""; echo "## Summary"
 echo "- total rows: $total"

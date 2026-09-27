@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataBrain for Claude Desktop</title>
+  <style>
+    :root { color-scheme: dark; --paper:#080a0d; --panel:#11151b; --ink:#f4f6f8; --muted:#a8b0bc; --accent:#91e6c2; --line:#29323d; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { width:min(820px,100%); margin:0 auto; padding:42px 46px; }
+    .eyebrow { color:var(--accent); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+    h1 { margin:12px 0 10px; max-width:650px; font-size:36px; line-height:1.05; letter-spacing:-.04em; }
+    h2 { margin:7px 0 8px; font-size:19px; line-height:1.2; }
+    p { margin:0; }
+    .intro,.step p,.card p,li,.privacy { color:var(--muted); }
+    .release-warning { margin:22px 0 18px; padding:11px 13px; border:1px solid #9a7040; border-radius:8px; color:#f1c98d; font-size:13px; }
+    .steps,.grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px; }
+    .step,.card { padding:17px; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+    .number { color:var(--accent); font-size:12px; font-weight:700; letter-spacing:.12em; }
+    .menu { margin:10px 0 0; padding:10px; border-radius:7px; background:#080b10; color:var(--ink); font-size:13px; }
+    .say { margin-top:18px; padding:14px 17px; border-left:3px solid var(--accent); background:#0d1716; }
+    .say strong { display:block; margin-bottom:4px; color:var(--accent); font-size:12px; text-transform:uppercase; }
+    .say q { font-size:20px; font-weight:650; }
+    ul { margin:9px 0 0; padding-left:19px; }
+    li + li { margin-top:5px; }
+    .privacy { margin-top:18px; padding-top:14px; border-top:1px solid var(--line); font-size:13px; }
+    .privacy strong { color:var(--ink); }
+    a { color:var(--accent); }
+    @media print { @page { size:letter; margin:0; } body { font-size:13px; line-height:1.18; print-color-adjust:exact; -webkit-print-color-adjust:exact; } main { padding:14px 38px; } h1 { font-size:29px; margin:8px 0; } h2 { font-size:17px; margin:4px 0 5px; } .steps,.grid { gap:7px; margin-top:9px; } .step,.card { padding:9px; } .release-warning { margin:10px 0 8px; padding:7px 9px; } .menu { margin-top:6px; padding:7px; } .say { margin-top:8px; padding:7px 11px; } .say q { font-size:17px; } ul { margin-top:5px; } li + li { margin-top:2px; } .privacy { margin-top:8px; padding-top:6px; } }
+    @media(max-width:620px) { main { padding:26px 19px; } h1 { font-size:31px; } .steps,.grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">DataBrain · Claude Desktop · Mac</div>
+    <h1>Your files stay where they are. Claude searches the folders you choose.</h1>
+    <section class="steps" aria-label="Install DataBrain">
+      <article class="step">
+        <div class="number">01 · DOWNLOAD</div>
+        <h2>Get the DataBrain extension</h2>
+        <p><a href="__VERIFIED_DATABRAIN_MCPB_DOWNLOAD_URL__">Download databrain.mcpb</a> to Downloads. Check that the file name ends in <strong>.mcpb</strong>.</p>
+      </article>
+      <article class="step">
+        <div class="number">02 · INSTALL</div>
+        <h2>Install it in Claude Desktop</h2>
+        <p>Open Claude Desktop. In the menu bar at the top of your Mac screen, choose <strong>Claude → Settings</strong>, then open:</p>
+        <div class="menu">Settings → Extensions → Advanced settings → Extension Developer → Install Extension…</div>
+        <p style="margin-top:9px">Select <strong>databrain.mcpb</strong> in Downloads and follow the prompts.</p>
+      </article>
+    </section>
+    <p class="intro" style="margin-top:14px">Before the setup chat, open DataBrain in <strong>Settings → Extensions</strong>. Set <strong>DataBrain folder location</strong> to Desktop; after you approve setup, DataBrain creates its own folder there. Under <strong>Folders DataBrain may use</strong>, select only document folders you want searched, such as Documents/Work. Do not select Desktop itself or a folder containing DataBrain.</p>
+    <div class="say"><strong>Then start a new chat</strong> <q>Set up my DataBrain.</q></div>
+    <p class="intro">DataBrain builds a local search index. You choose the folders, review suggested categories, and ask Claude questions about those files. Claude reports files it cannot read; unsupported files are left out of search.</p>
+    <div class="release-warning"><strong>PRE-RELEASE DRAFT.</strong> Replace the download placeholder and complete clean-Mac and Claude Desktop acceptance before publication.</div>
+    <section class="grid" aria-label="Setup and privacy">
+      <article class="card">
+        <h2>Choose what DataBrain can use</h2>
+        <ul>
+          <li>Your folder selections grant access; Claude starts reading files only after you confirm setup in chat.</li>
+          <li>Review Claude’s suggested categories before they are applied.</li>
+          <li>After changing source selections, restart Claude. Ask Claude to add the selected folders to keep existing access, or replace the selection to remove access to omitted folders.</li>
+          <li>Ask Claude to audit the install. It compares the running package and saved folder setup with the latest GitHub release record, then reports mismatches. It cannot verify the original download file, inspect Desktop’s hidden install record, or prove a restart/fresh chat; GitHub checks may be blocked offline or before a release exists.</li>
+          <li>Ask before saving a capture, note, or synthesis.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h2>Your originals are left alone</h2>
+        <ul>
+          <li>Search indexes and extracts are created locally.</li>
+          <li>Original documents are not moved or edited.</li>
+          <li>Paths and excerpts you ask Claude to read enter your Claude conversation.</li>
+          <li>New notes are created only after you ask and choose an approved folder.</li>
+        </ul>
+      </article>
+    </section>
+    <p class="privacy"><strong>If the tools are missing:</strong> open Settings → Extensions and check DataBrain’s connection status and logs. Restart Claude Desktop, then open a new chat. <a href="https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop">Claude’s extension help</a>.</p>
+  </main>
+</body>
+</html>

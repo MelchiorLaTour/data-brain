@@ -10,7 +10,7 @@
 # bash 3.2 (macOS default) — no associative arrays.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MOC="$ROOT/moc"
+MOC="${NB_MOC_DIR:-$ROOT/moc}"
 INDEX="$MOC/index.tsv"
 ROOMS="$MOC/rooms"
 TS="$(date '+%Y-%m-%d %H:%M')"

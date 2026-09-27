@@ -21,13 +21,14 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/bin/canon.sh"
-INDEX="$ROOT/moc/index.tsv"
+MOC="${NB_MOC_DIR:-$ROOT/moc}"
+INDEX="$MOC/index.tsv"
 TAG="${1:-manual}"
 
 # Single-flight lock: the nightly job, a hook-fired run, and a manual run must not interleave
 # (two ingest loops appending to index.tsv at once = duplicate rows). mkdir is atomic; a lock
 # older than 2h is a crash leftover and gets taken over so a stale lock can't kill freshness.
-LOCK="$ROOT/moc/.refresh.lock"
+LOCK="$MOC/.refresh.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
   age=$(( $(date +%s) - $(stat -f %m "$LOCK" 2>/dev/null || echo 0) ))
   if [ "$age" -lt 7200 ]; then
@@ -52,7 +53,7 @@ bash "$ROOT/bin/rebuild.sh"
 bash "$ROOT/bin/build-fts.sh"
 
 after="$(( $(wc -l < "$INDEX") - 1 ))"
-LOG="$ROOT/moc/log.md"
+LOG="$MOC/log.md"
 [ -f "$LOG" ] || printf '# NewBrain — change log (ingest history)\n\n_Append-only, newest at the bottom. `grep "^## \\[" moc/log.md | tail -5` for the latest._\n\n' > "$LOG"
 printf '## [%s] refresh (%s) | index %s -> %s notes, fts rebuilt\n' \
   "$(date '+%Y-%m-%d %H:%M')" "$TAG" "$before" "$after" >> "$LOG"

@@ -13,6 +13,18 @@ def main(argv: list[str]) -> int:
     if len(argv) == 3 and argv[:2] == ["-f", "%m"]:
         print(os.stat(argv[2]).st_mtime_ns // 1_000_000_000)
         return 0
+    if len(argv) == 3 and argv[:2] == ["-f", "%z:%m:%c"]:
+        info = os.stat(argv[2])
+        print(f"{info.st_size}:{int(info.st_mtime)}:{int(info.st_ctime)}")
+        return 0
+    if len(argv) == 3 and argv[:2] == ["-f", "%i:%z:%m:%c"]:
+        info = os.stat(argv[2])
+        print(f"{info.st_ino}:{info.st_size}:{int(info.st_mtime)}:{int(info.st_ctime)}")
+        return 0
+    if len(argv) == 3 and argv[:2] == ["-f", "%d:%i"]:
+        info = os.stat(argv[2])
+        print(f"{info.st_dev}:{info.st_ino}")
+        return 0
     if len(argv) == 3 and argv[:2] == ["-f", "%Sf"]:
         print(mode(argv[2]))
         return 0

@@ -5,6 +5,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
+MOC="${NB_MOC_DIR:-$ROOT/moc}"
 
 pass=0; fail=0; warn=0
 ok()   { echo "PASS  $1"; pass=$((pass+1)); }
@@ -16,12 +17,12 @@ command -v rg >/dev/null 2>&1      && ok "rg (ripgrep) present"      || bad "rg 
 command -v sqlite3 >/dev/null 2>&1 && ok "sqlite3 present"           || bad "sqlite3 missing"
 
 # 2. canon.sh sources clean, CANON non-empty, roots exist
-if bash -c "set -u; ROOT='$ROOT'; source bin/canon.sh" >/dev/null 2>&1; then
+if NB_ENGINE_ROOT="$ROOT" bash -c 'set -u; ROOT="$NB_ENGINE_ROOT"; source "$ROOT/bin/canon.sh"' >/dev/null 2>&1; then
   ok "bin/canon.sh sources clean"
-  nroots="$(bash -c "set -u; ROOT='$ROOT'; source bin/canon.sh; echo \${#CANON[@]}")"
+  nroots="$(NB_ENGINE_ROOT="$ROOT" bash -c 'set -u; ROOT="$NB_ENGINE_ROOT"; source "$ROOT/bin/canon.sh"; echo ${#CANON[@]}')"
   if [ "${nroots:-0}" -gt 0 ]; then
     ok "CANON has $nroots root(s)"
-    missing_roots="$(bash -c "set -u; ROOT='$ROOT'; source bin/canon.sh; for r in \"\${CANON[@]}\"; do [ -d \"\$r\" ] || echo \"\$r\"; done")"
+    missing_roots="$(NB_ENGINE_ROOT="$ROOT" bash -c 'set -u; ROOT="$NB_ENGINE_ROOT"; source "$ROOT/bin/canon.sh"; for r in "${CANON[@]}"; do [ -d "$r" ] || echo "$r"; done')"
     if [ -z "$missing_roots" ]; then
       ok "every CANON root exists on disk"
     else
@@ -35,8 +36,8 @@ else
 fi
 
 # 3. index.tsv exists with data rows
-if [ -s moc/index.tsv ]; then
-  rows="$(awk -F'\t' 'NR>1 && $1 !~ /^#/' moc/index.tsv | wc -l | tr -d ' ')"
+if [ -s "$MOC/index.tsv" ]; then
+  rows="$(awk -F'\t' 'NR>1 && $1 !~ /^#/' "$MOC/index.tsv" | wc -l | tr -d ' ')"
   if [ "$rows" -gt 0 ]; then ok "moc/index.tsv has $rows data rows"; else bad "moc/index.tsv has no data rows — run ./install.sh"; fi
 else
   bad "moc/index.tsv missing/empty — run ./install.sh"
@@ -44,16 +45,16 @@ else
 fi
 
 # 4. fts.db exists and is populated
-if [ -f moc/fts.db ]; then
-  cnt="$(sqlite3 moc/fts.db "SELECT count(*) FROM notes;" 2>/dev/null || echo 0)"
+if [ -f "$MOC/fts.db" ]; then
+  cnt="$(sqlite3 "$MOC/fts.db" "SELECT count(*) FROM notes;" 2>/dev/null || echo 0)"
   if [ "${cnt:-0}" -gt 0 ]; then ok "moc/fts.db populated ($cnt rows)"; else bad "moc/fts.db empty/unreadable — run bash bin/build-fts.sh"; fi
 else
   bad "moc/fts.db missing — run bash bin/build-fts.sh"
 fi
 
 # 5. fts.sh smoke query returns a ranked hit
-if [ -f moc/fts.db ] && [ "${rows:-0}" -gt 0 ]; then
-  word="$(awk -F'\t' 'NR>1 && $1 !~ /^#/ { print $2; exit }' moc/index.tsv | tr -cs '[:alnum:]' '\n' | awk 'length($0) >= 4 { print tolower($0); exit }')"
+if [ -f "$MOC/fts.db" ] && [ "${rows:-0}" -gt 0 ]; then
+  word="$(awk -F'\t' 'NR>1 && $1 !~ /^#/ { print $2; exit }' "$MOC/index.tsv" | tr -cs '[:alnum:]' '\n' | awk 'length($0) >= 4 { print tolower($0); exit }')"
   if [ -n "$word" ]; then
     if bash bin/fts.sh "$word" 3 2>/dev/null | grep -Eq '^\s*1\s'; then
       ok "fts.sh smoke query (\"$word\") returns ranked hits"
@@ -67,7 +68,7 @@ fi
 
 # 6. labeling progress (WARN only — labeling is the agent-assisted INSTALL.md step)
 if [ "${rows:-0}" -gt 0 ]; then
-  labeled="$(awk -F'\t' 'NR>1 && $1 !~ /^#/ && $3 != "-" && $3 != ""' moc/index.tsv | wc -l | tr -d ' ')"
+  labeled="$(awk -F'\t' 'NR>1 && $1 !~ /^#/ && $3 != "-" && $3 != ""' "$MOC/index.tsv" | wc -l | tr -d ' ')"
   pct=$(( labeled * 100 / rows ))
   if [ "$labeled" -eq 0 ]; then
     note "0% of rows labeled — labeling not done yet (INSTALL.md agent step: mapping -> label-by-path.sh)"

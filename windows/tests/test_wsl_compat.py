@@ -17,13 +17,14 @@ class WslCompatibilityTests(unittest.TestCase):
             checkout = temporary_root / "data-brain"
             notes = temporary_root / "notes"
             notes.mkdir()
+            canonical_notes = notes.resolve()
             (notes / "launch.md").write_text(
                 "---\ntheme: work\ntags: [launch, test]\n---\nWSL launch checklist\n",
                 encoding="utf-8",
             )
             shutil.copytree(SOURCE, checkout, ignore=shutil.ignore_patterns(".git", "moc"))
             canon = checkout / "bin" / "canon.sh"
-            canon.write_text(canon.read_text(encoding="utf-8").replace('$HOME/Notes', str(notes)), encoding="utf-8")
+            canon.write_text(canon.read_text(encoding="utf-8").replace('$HOME/Notes', str(canonical_notes)), encoding="utf-8")
             environment = os.environ | {"PATH": f"{checkout / 'windows' / 'shims'}:{os.environ['PATH']}"}
             for command in ("build-index.sh", "build-fts.sh"):
                 completed = subprocess.run(

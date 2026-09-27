@@ -24,10 +24,10 @@ all="$tmpd/all"
 # Every note-like file across the corpus (same scope + prune as ingest-root.sh).
 for root in "${CANON[@]}"; do
   [ -d "$root" ] || continue
-  find "$root" -type f \( -name '*.md' -o -name '*.txt' -o -name '*.pdf' \
+  find "$root" "${PRUNE_DIRS[@]}" -type f \( -name '*.md' -o -name '*.txt' -o -name '*.pdf' \
      -o -name '*.docx' -o -name '*.doc' -o -name '*.pages' -o -name '*.rtf' \
      -o -name '*.bak' -o -name '*.old' -o -name '*.orig' -o -name '*.tmp' \) \
-     "${PRUNE_FIND[@]}" 2>/dev/null
+     "${PRUNE_FIND[@]}" -print 2>/dev/null
 done | sort -u > "$all"
 
 is_protected () { echo "$1" | grep -qiE "$PROTECT"; }

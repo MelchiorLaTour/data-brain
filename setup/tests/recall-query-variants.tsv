@@ -1,0 +1,81 @@
+id	stratum	question	variant1	variant2
+EASY-01	Easy	How long does a customer have to request a refund?	What is the refund request period?	How many days are allowed to ask for a refund?
+EASY-02	Easy	When is an invoice due after it is issued?	What is the invoice payment deadline?	How soon must an issued invoice be paid?
+EASY-03	Easy	Where is the recording saved after a meeting?	Where can I find a meeting recording?	Where do meeting recordings get stored?
+EASY-04	Easy	Which weekday is the office closed?	On which day does the office close?	What day of the week is the office shut?
+EASY-05	Easy	What must staff attach to an expense claim?	Which proof is needed for an expense claim?	What receipt should employees include with expenses?
+EASY-06	Easy	Who can reset a locked account?	Who unlocks a locked user account?	Which team can restore access to a locked account?
+EASY-07	Easy	Where are signed contracts stored?	Where should executed contracts be filed?	What archive holds signed agreements?
+EASY-08	Easy	What document is required at project handoff?	Which checklist or form is needed for project transfer?	What must be handed over when a project ends?
+EASY-09	Easy	Who approves international travel?	Who signs off on overseas business trips?	Which role authorizes travel outside the country?
+EASY-10	Easy	How long are support recordings kept?	What is the retention period for support-call recordings?	For how many days do support call recordings remain?
+MEDIUM-01	Medium	Who may grant an exception to the return policy?	Who can approve an exception to the returns rules?	Who has authority to allow a refund outside standard policy?
+MEDIUM-02	Medium	What second check is required when regaining account access?	What verification step follows a password reset?	Which extra authentication is needed to restore account access?
+MEDIUM-03	Medium	When should the supplier expect payment?	What are the payment terms for a supplier bill?	How long does the company have to pay a vendor invoice?
+MEDIUM-04	Medium	What happens when the storage period ends?	What is done with records after retention expires?	How are records handled at the end of their retention term?
+MEDIUM-05	Medium	Where should a serious service interruption be reported?	How should a major outage be escalated?	Which channel handles reporting a critical service failure?
+MEDIUM-06	Medium	Which person signs off on an employee trip?	Who authorizes an employee business journey?	Whose approval is needed before booking work travel?
+MEDIUM-07	Medium	How early should a software subscription be renewed?	What is the license-renewal lead time?	How far ahead of expiry should a subscription renewal start?
+MEDIUM-08	Medium	How can a buyer check whether an order has arrived?	How can someone track an order shipment?	Where can a purchaser see delivery progress?
+MEDIUM-09	Medium	Who is responsible for completing an action agreed in a meeting?	Who owns each follow-up agreed during a meeting?	How is responsibility assigned for meeting actions?
+MEDIUM-10	Medium	What is the next step after a promising application?	What follows when an application looks promising?	What interview step comes after a strong job application?
+HARD-01	Hard	Who takes the first call when a system fails overnight?	Who is the overnight on-call contact for a system outage?	Which responder handles a system breakdown after hours?
+HARD-02	Hard	Which group investigates a payment the customer says they did not make?	Who investigates an unauthorized customer card transaction?	Which team handles a disputed or unrecognized payment?
+HARD-03	Hard	Who handles goods damaged before they reach the buyer?	Who files claims for products damaged in transit?	Which group deals with shipment damage before delivery?
+HARD-04	Hard	Who can authorize a departure from the usual rule?	Who grants approval to deviate from standard policy?	Who authorizes an exception to the normal rule?
+HARD-05	Hard	What is the first internal step after private information is exposed?	What is the immediate response to a personal-data leak?	Which internal process starts after confidential information is exposed?
+HARD-06	Hard	When is a new vendor checked for risk?	When does vendor due diligence take place?	At what stage is a new supplier risk-screened?
+HARD-07	Hard	Who coordinates bringing a lost service back from a copy?	Who leads service recovery from a backup?	Which role restores a failed service using a saved copy?
+HARD-08	Hard	Where does an employee report an unsafe condition?	Where should staff report a workplace hazard?	How does an employee raise an unsafe work condition?
+HARD-09	Hard	What should happen when a committed delivery date cannot be met?	What is required when a promised delivery will be late?	How should teams handle a missed committed delivery date?
+HARD-10	Hard	Who reviews suspected use beyond the software agreement?	Who investigates suspected software-license violations?	Which team reviews possible use beyond the software contract?
+HARD-11	Hard	Who owns a complaint that remains unresolved after support?	Who takes ownership of an unresolved customer complaint?	Which manager handles a complaint support could not resolve?
+HARD-12	Hard	Who follows up when a client has not paid an invoice?	Which team pursues overdue customer invoices?	Who contacts clients about unpaid bills?
+HARD-13	Hard	Who makes the final choice after interview feedback is collected?	Who selects the candidate after interview reviews?	Who makes the hiring decision once panel feedback is in?
+HARD-14	Hard	Who checks an agreement before it is signed?	Who performs a pre-signature contract review?	Which role checks terms before an agreement is executed?
+HARD-15	Hard	Who helps a traveler when a booked flight is cancelled?	Who rebooks a traveler after a flight cancellation?	Where can an employee get help with a cancelled work flight?
+HARD-16	Hard	What prevents routine deletion while a case is open?	What legal hold stops records from being routinely erased?	How are documents preserved during an active investigation or case?
+HARD-17	Hard	When should a departing worker lose system access?	At what point should a leaver’s account be disabled?	When must system access end for a departing employee?
+HARD-18	Hard	Who decides whether a failed update should be reversed?	Who decides to roll back an unsuccessful software update?	Which role authorizes reversal after an update failure?
+HARD-19	Hard	Where are repeated product defects sent for investigation?	Where are recurring product faults escalated?	Which group investigates repeated product defects?
+HARD-20	Hard	Who explains spending that is above the approved plan?	Who accounts for spending over budget?	Which role explains expenses beyond the approved plan?
+HARD-21	Hard	What should happen to a sensitive page left at a shared printer?	What should someone do with confidential pages left at a printer?	How should exposed sensitive printouts be secured?
+HARD-22	Hard	Who is expected to deliver an agreed task after a meeting?	Who is accountable for a meeting action item?	Which person completes a task agreed in the meeting?
+HARD-23	Hard	Who investigates when the same supplier bill appears twice?	Who resolves duplicate supplier invoices?	Which team investigates a vendor bill submitted twice?
+HARD-24	Hard	Who communicates that staff should not come to the site?	Who sends a workplace emergency closure notice?	Which role tells employees to stay away from the site?
+HARD-25	Hard	Who must be told when a work laptop goes missing?	Who handles a lost company computer report?	Which team must be notified about a missing work laptop?
+HARD-26	Hard	Who reviews a purchase that exceeded the employee limit?	Who reviews an employee purchase above their cap?	Which role checks spending that exceeded an individual limit?
+HARD-27	Hard	Who investigates a parcel marked delivered but not received?	Who investigates a delivery marked complete but missing?	Which team handles a parcel the recipient never received?
+HARD-28	Hard	Who confirms that a user still needs a privileged role?	Who revalidates elevated account permissions?	Which role confirms continued need for privileged access?
+HARD-29	Hard	Who renews a certificate before a service loses trust?	Who renews expiring service certificates?	Which administrator prevents a certificate from lapsing?
+HARD-30	Hard	Who approves a response to a journalist?	Who clears external press statements?	Which director approves a media response?
+HARD-31	Hard	Who coordinates immediate help at the workplace?	Who organizes urgent workplace medical assistance?	Which person coordinates help for an on-site emergency?
+HARD-32	Hard	Who assesses a sign-in from an unexpected location?	Who investigates logins from unusual locations?	Which group checks suspicious sign-in locations?
+HARD-33	Hard	Who must authorize a risky production change?	Who approves a high-risk change in production?	Which authority signs off on risky live-system changes?
+HARD-34	Hard	Who handles a request to obtain a copy of personal information?	Where are personal-data copy requests handled?	Which team coordinates access requests for personal information?
+HARD-35	Hard	Who tells internal teams that an external service is unavailable?	Who alerts staff when a vendor service goes down?	Which owner communicates an external provider outage internally?
+HARD-36	Hard	What record is required after an employee is hurt at work?	Which form records an employee workplace injury?	Where must an on-the-job injury be documented?
+HARD-37	Hard	Who should be told first when a scheduled worker cannot attend?	Who needs to know first about an unplanned shift absence?	Which supervisor should a worker notify when unable to attend?
+HARD-38	Hard	Who restores access when a shared file cannot be opened?	Who fixes permissions on an inaccessible shared document?	Which owner restores access to a shared file?
+HARD-39	Hard	Who discusses revised terms before a supplier agreement ends?	Who leads supplier contract renewal talks?	Which role negotiates updated terms before an agreement expires?
+HARD-40	Hard	Who takes over when a support issue misses its response target?	Who owns an escalation that missed its service target?	Which manager takes over a delayed support case?
+XLING-01	Xling	¿Quién autoriza una devolución excepcional?	Who can approve an exceptional refund?
+XLING-02	Xling	Où sont archivés les accords signés ?	Where are signed agreements archived?
+XLING-03	Xling	Chi coordina il ripristino dopo un guasto?	Who coordinates recovery after a failure?
+XLING-04	Xling	Wer genehmigt eine internationale Geschäftsreise?	Who approves international business travel?
+XLING-05	Xling	¿Cuándo deben borrarse los registros vencidos?	When should expired records be deleted?
+XLING-06	Xling	Qui examine une facture payée deux fois ?	Who reviews an invoice that was paid twice?
+XLING-07	Xling	Dove si segnala un pericolo sul posto di lavoro?	Where should a workplace hazard be reported?
+XLING-08	Xling	Wer untersucht eine ungewöhnliche Anmeldung?	Who investigates an unusual login?
+XLING-09	Xling	¿Quién aprueba un cambio de producción de alto riesgo?	Who approves a high-risk production change?
+XLING-10	Xling	Où demander une copie de ses données personnelles ?	Where can someone request a copy of their personal data?
+XLING-11	Xling	Chi contatta il cliente per una fattura scaduta?	Who contacts a customer about an overdue invoice?
+XLING-12	Xling	Wer entscheidet über die Auswahl nach den Gesprächen?	Who makes the final choice after interviews?
+XLING-13	Xling	¿Quién comunica el cierre de emergencia de una sede?	Who announces an emergency site closure?
+XLING-14	Xling	Où signaler la perte d’un ordinateur professionnel ?	Where should a lost work computer be reported?
+XLING-15	Xling	Chi negozia le condizioni prima della scadenza del contratto?	Who negotiates terms before a contract expires?
+XLING-16	Xling	Wer übernimmt einen ungelösten Supportfall?	Who takes over an unresolved support case?
+XLING-17	Xling	¿Quién revisa el gasto que supera el límite?	Who reviews spending above the limit?
+XLING-18	Xling	Où déclarer une blessure survenue au travail ?	Where should a workplace injury be reported?
+XLING-19	Xling	Chi aiuta a riprenotare un volo cancellato?	Who helps rebook a cancelled flight?
+XLING-20	Xling	Wer erneuert ein Zertifikat vor seinem Ablauf?	Who renews a certificate before it expires?

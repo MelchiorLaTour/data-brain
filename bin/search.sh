@@ -40,7 +40,7 @@ if [ -n "$RG_BIN" ]; then
   # artifact exclusion silently failed in the old order).
   cand="$("$RG_BIN" --files -g '*.md' -g '*.txt' -g '*.markdown' "${PRUNE_RG[@]}" "${CANON[@]}" "$HOUSE_MEM" 2>/dev/null || true)"
 else
-  cand="$(find "${CANON[@]}" "$HOUSE_MEM" -type f \( -name '*.md' -o -name '*.txt' -o -name '*.markdown' \) "${PRUNE_FIND[@]}" 2>/dev/null || true)"
+  cand="$(find "${CANON[@]}" "$HOUSE_MEM" "${PRUNE_DIRS[@]}" -type f \( -name '*.md' -o -name '*.txt' -o -name '*.markdown' \) "${PRUNE_FIND[@]}" -print 2>/dev/null || true)"
 fi
 # Post-filter the candidate list shell-side: rg silently ignores multi-component anchored globs
 # (measured 2026-07-05 — '!**/NewBrain/**' left 1080 Desktop/NewBrain files in the corpus), so

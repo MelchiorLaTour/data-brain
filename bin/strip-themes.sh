@@ -30,7 +30,7 @@ while IFS= read -r f; do
 done < <(
   for root in "${CANON[@]}"; do
     [ -d "$root" ] || continue
-    find "$root" -type f -name '*.md' "${PRUNE_FIND[@]}"
+    find "$root" "${PRUNE_DIRS[@]}" -type f -name '*.md' "${PRUNE_FIND[@]}" -print
   done | sort
 )
 

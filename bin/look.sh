@@ -14,8 +14,9 @@
 #        LOOK_CAP=N look.sh "..."                  (per-hit snippet char cap; default 1200)
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/bin/canon.sh"
 FTS="$ROOT/bin/fts.sh"
-EXDIR="$ROOT/moc/extracted"
+EXDIR="${NB_EXTRACTED_DIR:-${NB_MOC_DIR:-$ROOT/moc}/extracted}"
 CAP="${LOOK_CAP:-1200}"   # per-hit snippet cap — enough to JUDGE a hit, not read the whole note
 
 K=3
@@ -26,14 +27,19 @@ Q="${*:-}"
 # resolve a note body via the SAME 3-step rule as compile-room.sh: extract -> local md/txt -> none.
 # echoes the body on stdout; returns 0 if a body was found, 1 if title-only.
 resolve_body() {
-  local path="$1" f h ex
+  local path="$1" f h ex fingerprint
+  f="${path/#\~/$HOME}"
+  is_approved_source_file "$f" || return 1
   h="$(printf '%s' "$path" | shasum | cut -c1-16)"
   ex="$EXDIR/$h.txt"
-  if [ -s "$ex" ]; then                                  # step 1: derived extract (the cheap tier)
+  fingerprint="$(stat -f '%i:%z:%m:%c' "$f" 2>/dev/null || true)"
+  if [ -s "$ex" ] && [ ! -L "$ex" ] \
+      && [ "$(sed -n '1p' "$ex")" = "<!-- newbrain-extract source: $path -->" ] \
+      && [ "$(sed -n '2p' "$ex")" = "<!-- newbrain-extract fingerprint: $fingerprint -->" ]; then
     grep -v '^<!-- newbrain-extract source:' "$ex" | sed '/./,$!d'
     return 0
   fi
-  f="${path/#\~/$HOME}"                                  # step 2: local md/txt body
+  # step 2: local md/txt body
   case "$f" in *.md|*.markdown|*.txt) ;; *) return 1 ;; esac
   if [ -f "$f" ] && [ -r "$f" ] && ! ls -lO "$f" 2>/dev/null | grep -q 'dataless'; then
     cat "$f"; return 0
@@ -50,8 +56,7 @@ fi
 
 # Tier 2: for each ranked hit line ("  1   -12.96  ~/path"), print the cheap snippet.
 printf '%s\n' "$fts_out" | while IFS= read -r line; do
-  case "$line" in
-    [[:space:]]*[0-9]*[-0-9.]*[[:space:]]*'~'*)   # a ranked result line
+  if printf '%s\n' "$line" | grep -Eq '^ *[0-9]+ +[-0-9.]+ +(~/|/)'; then
       path="$(printf '%s' "$line" | sed -E 's/^ *[0-9]+ +[-0-9.]+ +//')"
       printf '\n%s\n' "$line"
       if body="$(resolve_body "$path")"; then
@@ -61,10 +66,9 @@ printf '%s\n' "$fts_out" | while IFS= read -r line; do
       else
         printf '    _(title-only — offloaded original or OCR failure; open the note or run extract.sh)_\n'
       fi
-      ;;
-    *)   # non-result lines (the ⚠ WEAK MATCH advisory, warnings) — pass through verbatim
-      printf '%s\n' "$line"
-      ;;
-  esac
+  else
+    # non-result lines (the ⚠ WEAK MATCH advisory, warnings) — pass through verbatim
+    printf '%s\n' "$line"
+  fi
 done
 exit 0   # the read-loop returns 1 at EOF; the script itself succeeded

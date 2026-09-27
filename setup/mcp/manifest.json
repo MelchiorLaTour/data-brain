@@ -1,0 +1,48 @@
+{
+  "manifest_version": "0.3",
+  "name": "databrain",
+  "display_name": "DataBrain",
+  "version": "0.1.0",
+  "description": "Create and search a private local index of folders you choose.",
+  "author": {
+    "name": "Melchior La Tour"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "setup/mcp/server.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/setup/mcp/server.mjs",
+        "--databrain-parent",
+        "${user_config.data_parent}",
+        "--databrain-source-roots",
+        "${user_config.source_roots}"
+      ]
+    }
+  },
+  "user_config": {
+    "data_parent": {
+      "type": "directory",
+      "title": "DataBrain folder location",
+      "description": "Choose where DataBrain may create its own DataBrain folder after you start setup in chat.",
+      "default": "${DESKTOP}",
+      "required": true
+    },
+    "source_roots": {
+      "type": "directory",
+      "title": "Folders DataBrain may use",
+      "description": "Choose one or more folders. DataBrain will not inspect them until you explicitly start setup in chat.",
+      "multiple": true,
+      "required": true
+    }
+  },
+  "tools_generated": true,
+  "compatibility": {
+    "platforms": ["darwin"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

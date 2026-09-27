@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataBrain connection help</title>
+  <style>
+    :root { color-scheme:dark; --paper:#080a0d; --panel:#11151b; --ink:#f4f6f8; --muted:#a8b0bc; --accent:#91e6c2; --line:#29323d; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { width:min(720px,100%); margin:0 auto; padding:38px 40px; }
+    .eyebrow { color:var(--accent); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+    h1 { margin:12px 0 10px; font-size:32px; line-height:1.1; letter-spacing:-.035em; }
+    .intro,li { color:var(--muted); }
+    ol { margin:22px 0; padding:0; list-style:none; counter-reset:steps; }
+    li { counter-increment:steps; position:relative; margin:10px 0; padding:15px 16px 15px 52px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+    li::before { content:counter(steps,decimal-leading-zero); position:absolute; left:16px; top:15px; color:var(--accent); font-size:12px; font-weight:700; letter-spacing:.08em; }
+    strong { color:var(--ink); }
+    .callout { padding:13px 15px; border-left:3px solid var(--accent); background:#0d1716; color:var(--muted); }
+    a { color:var(--accent); }
+    @media print { @page { size:letter; margin:0; } body { print-color-adjust:exact; -webkit-print-color-adjust:exact; } main { padding:36px 42px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">DataBrain · Claude Desktop · Mac</div>
+    <h1>When DataBrain tools are missing</h1>
+    <p class="intro">Use these checks before changing settings. They still work when DataBrain has not connected to the chat.</p>
+    <ol>
+      <li><strong>Start a new chat.</strong> Extensions become available in conversations after installation.</li>
+      <li><strong>Check the connection.</strong> In Claude Desktop, open the <strong>+</strong> menu below the chat box, choose <strong>Connectors</strong>, and look for DataBrain.</li>
+      <li><strong>Check the installation.</strong> Open <strong>Settings → Extensions</strong> and confirm DataBrain appears there. If it appears installed but its tools are missing, restart Claude Desktop and open another new chat.</li>
+      <li><strong>If it still does not connect, check its local logs.</strong> Open Claude Desktop’s <strong>Developer settings</strong> and inspect the DataBrain connection status and logs. If Claude says the extension file is corrupted, download a fresh copy and install that file again.</li>
+    </ol>
+    <p class="callout">Do not select a wider folder or change permissions to fix a connection problem. For Claude’s current install and troubleshooting steps, see <a href="https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop">Claude Desktop extension help</a>.</p>
+  </main>
+</body>
+</html>

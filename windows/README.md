@@ -25,6 +25,9 @@ Use `bash windows/data-brain-wsl.sh <command> [arguments]` for normal
 commands, for example `fts "project notes" 5`, `refresh`, or `verify`.
 
 The launcher adds Windows-only `stat` and `date` compatibility shims ahead of
-the original scripts. Original note roots may be Windows directories mounted
-under `/mnt/c/...`; keep Data Brain's repository and derived `moc/` state in
-the WSL filesystem. Cloud-only files are never hydrated automatically.
+the original scripts. The `stat` shim covers BSD file mode, inode-aware file
+fingerprints, device/inode directory identity, modification, and change-time
+formats used by indexing and extraction. Original note roots may
+be Windows directories mounted under `/mnt/c/...`; keep Data Brain's repository
+and derived `moc/` state in the WSL filesystem. Cloud-only files are never
+hydrated automatically.

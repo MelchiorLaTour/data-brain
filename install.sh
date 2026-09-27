@@ -14,6 +14,8 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
+unset NB_CANON_ROOTS_FILE
+source "$ROOT/bin/canon.sh"
 
 echo "== NewBrain install =="
 
@@ -37,7 +39,7 @@ for d in "$HOME/Notes" "$HOME/Documents" "$HOME/Desktop" "$HOME/Downloads"; do
 done
 i=1
 for d in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
-  n="$(find "$d" -maxdepth 3 \( -name '*.md' -o -name '*.pdf' -o -name '*.txt' -o -name '*.docx' \) 2>/dev/null | head -500 | wc -l | tr -d ' ')"
+  n="$(find "$d" -maxdepth 3 "${PRUNE_DIRS[@]}" -type f \( -name '*.md' -o -name '*.pdf' -o -name '*.txt' -o -name '*.docx' \) "${PRUNE_FIND[@]}" -print 2>/dev/null | head -500 | wc -l | tr -d ' ')"
   printf '  %d) %s  (~%s note-like files, shallow sample)\n' "$i" "$d" "$n"
   i=$((i+1))
 done

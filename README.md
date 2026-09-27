@@ -1,22 +1,24 @@
 # Data Brain — a no-copy second brain for LLM & AI agents
 
-A personal knowledge index that lets an AI agent (Claude Code or any model that can run bash)
-search, read, and honestly abstain over YOUR notes — without moving, copying, or converting a
-single file. Pure bash + ripgrep + sqlite FTS5. Zero model calls, zero API, zero network in the
-engine. Works with the agent completely off.
+A personal knowledge index that lets an AI agent
+search, read, and honestly abstain over YOUR notes without moving or editing the originals.
+It stores derived search data, including extracted text, in its own working folder. The
+terminal engine uses bash and sqlite FTS5 without a model call or network connection.
 
-**This is a blueprint, not a turnkey app.** The engine ships as-is; the index, room taxonomy,
-and folder mappings are yours, regenerated on your machine by the [INSTALL.md](INSTALL.md)
-bootstrap. Several files are explicitly marked `EDIT:` templates.
+**Claude Desktop release status:** A packaged macOS extension candidate has been built and tested
+with disposable local files. Frozen synthetic query-variant bars pass; Claude-generated
+queries, held-out answer quality, and a physical Claude Desktop install remain unverified.
+There is no verified public download yet. See the
+[acceptance ledger](setup/ACCEPTANCE.md) before distributing the package. The terminal route
+remains available through [INSTALL.md](INSTALL.md).
 
 ## Compatibility
 
-**Claude Code only, for now.** The engine is agent-agnostic bash, but the wiring that makes
-the system automatic — the SessionStart digest hook, the discovery trigger rows, the
-agent-run install — is built and tested against Claude Code (CLI, desktop app, or IDE
-extension), on macOS. The full honest matrix (Claude Desktop's degraded path, Codex CLI
-status, Windows/WSL, the exhaustive macOS-only list) is in
-[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+The terminal setup targets Claude Code on macOS. A separate Claude Desktop extension is
+under local acceptance testing; it has not passed a physical install or been published.
+Its package, setup flow, tests, and current limits are described in
+[setup/README.md](setup/README.md). [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) describes
+the older terminal integration; use the acceptance ledger above for the extension's status.
 
 ## Architecture
 
@@ -47,8 +49,9 @@ honestly say "not in the brain" instead of guessing.
 
 ## Philosophy
 
-- **No copies, ever.** Notes live once, in their real homes. The brain is an *access layer*:
-  an index of labels pointing at canonical paths. Delete the brain, lose nothing.
+- **Original files stay in place.** The brain is an *access layer*: an index of labels and
+  derived search text pointing at canonical paths. Delete the generated brain data, and the
+  original files remain in their folders.
 - **Never move or rename a Finder-visible file.** Labels live in `moc/index.tsv`, not in your
   folder structure. Organizing = editing a TSV row, not dragging files.
 - **Agent-OFF engine.** Everything in `bin/` is pure bash + ripgrep + sqlite. It runs cold, in
@@ -112,13 +115,15 @@ honestly say "not in the brain" instead of guessing.
   spread over messy roots.
 - **Your notes live in cloud apps** (Notion, Evernote, Apple Notes without export). The engine
   indexes *files on disk*. Export first or look elsewhere.
-- **You never use a terminal-capable agent.** The doctrine half assumes an agent that can run
-  bash.
+- **You need a published Claude Desktop download today.** The extension has not passed its
+  release gates or been published yet.
 
 ## Security notes
 
-- The engine makes **no network calls** and phones nothing home; it reads your files and writes
-  only inside its own `moc/` directory (plus capture destinations you configure).
+- The terminal engine makes **no network calls**; it reads your files and writes only inside
+  its own `moc/` directory (plus capture destinations you configure). The separate Desktop
+  extension's optional install audit requests public GitHub release metadata without sending
+  document content.
 - `canon.sh` prunes a `Resources/Sensitive/` path by default — keep credentials/secrets in one
   hard-blocked folder and the index never sees them. Pair with a PreToolUse hook that refuses
   agent reads of that path (pattern in the companion claude-optimization repo).
@@ -156,7 +161,12 @@ reproduced; treat them as existence proofs, not benchmarks.
 
 ## Install
 
-Install is two layers:
+The Claude Desktop extension is still a local candidate. Its intended first-run flow is one
+`.mcpb` download, installation through Claude Desktop's Extensions settings, and a new chat
+with **“Set up my DataBrain.”** Do not treat the local candidate as a verified release; see
+[setup/README.md](setup/README.md) for the package and test status.
+
+The established terminal installation is two layers:
 
 1. **`./install.sh`** [no LLM needed] — checks dependencies (ripgrep, sqlite3), walks you
    through picking your note roots, builds the index and the ranked-search database, and

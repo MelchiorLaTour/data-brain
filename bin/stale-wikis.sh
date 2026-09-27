@@ -7,7 +7,8 @@
 # Pure bash, Claude-OFF, reads only NewBrain's own files. Never edits/deletes/moves anything.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WIKI="$ROOT/moc/wiki"
+MOC="${NB_MOC_DIR:-$ROOT/moc}"
+WIKI="$MOC/wiki"
 [ -d "$WIKI" ] || exit 0
 
 for b in "$WIKI"/*/_BUNDLE.md; do

@@ -27,8 +27,8 @@ verdict () {  # $1=copy (delete target) $2=keeper
 all="$(mktemp)"; trap 'rm -f "$all"' EXIT
 for root in "${CANON[@]}"; do
   [ -d "$root" ] || continue
-  find "$root" -type f \( -name '*.md' -o -name '*.txt' -o -name '*.pdf' -o -name '*.docx' \
-     -o -name '*.doc' -o -name '*.pages' -o -name '*.rtf' \) "${PRUNE_FIND[@]}" 2>/dev/null
+  find "$root" "${PRUNE_DIRS[@]}" -type f \( -name '*.md' -o -name '*.txt' -o -name '*.pdf' -o -name '*.docx' \
+     -o -name '*.doc' -o -name '*.pages' -o -name '*.rtf' \) "${PRUNE_FIND[@]}" -print 2>/dev/null
 done | sort -u > "$all"
 
 PROTECT='resume|cv|letter|lettre|essay|essai|motivation|cover|recommendation|recomendation|draft|brouillon'

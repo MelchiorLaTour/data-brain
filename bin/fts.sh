@@ -11,11 +11,13 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # DB defaults to the live index; NB_FTS_DB overrides it for scratch A/B measurement (env unset =
 # live behavior, so this is transparent to every normal caller).
-DB="${NB_FTS_DB:-$ROOT/moc/fts.db}"
+MOC="${NB_MOC_DIR:-$ROOT/moc}"
+DB="${NB_FTS_DB:-$MOC/fts.db}"
 [ -f "$DB" ] || { echo "fts: no index — run build-fts.sh first ($DB missing)" >&2; exit 1; }
 # Stale-index warning: index.tsv is the label source of truth; if it changed after fts.db was
 # built, the ranked results may miss or mislabel recent notes. Warning only — never blocks.
-[ "$ROOT/moc/index.tsv" -nt "$DB" ] && echo "⚠ fts index STALE: moc/index.tsv is newer than fts.db — run: bash bin/build-fts.sh" >&2
+INDEX="${NB_FTS_INDEX:-$MOC/index.tsv}"
+[ -f "$INDEX" ] && [ "$INDEX" -nt "$DB" ] && echo "⚠ fts index STALE: $INDEX is newer than $DB — run: bash bin/build-fts.sh" >&2
 
 # Trailing numeric arg = result limit; the rest is the query.
 LIMIT=20
