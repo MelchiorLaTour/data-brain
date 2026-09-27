@@ -106,3 +106,25 @@ was run. `python3 -m unittest discover -s windows/tests -v` passes 2 tests. The 
 cover inode-aware file fingerprints and device/inode directory identity; the integration
 test runs index building and FTS through the WSL compatibility layer. This validates the
 shim contract, not a physical Windows installation.
+
+## 2026-09-27 resumed-goal recheck
+
+- `bash setup/tests/test_mcp_package.sh` exited 0 in this resumed run. It rebuilt the package
+  from clean source revision `da4990db4b2daab66e7824b30ac047a776e5be8d`; the suite passed
+  package bootstrap, release-audit, setup-consent, 50-file/10-category indexing and search,
+  synthetic retrieval variants, taxonomy, freshness, capture, source-race, and engine fixtures.
+  The variant exam met its frozen synthetic thresholds; the raw single-query diagnostic still
+  missed Medium, Hard, and XLING bars. No personal corpus or Claude-generated answer was tested.
+- The rebuilt local MCPB SHA-256 is
+  `6251e855b8070b632b8de1b291d635cb25baa4754d37bc771a71a7e4d481ede2`; its adjacent checksum
+  verifies, and MCPB CLI 2.1.2 validates the manifest and identifies the archive as unsigned.
+  It remains version 0.1.0 and is not published as a corrected release.
+- A no-prompt install attempt against the existing `/Applications/Claude.app` failed:
+  `open -a /Applications/Claude.app <databrain.mcpb>` returned LaunchServices
+  `kLSNoExecutableErr`. The bundle's `Contents/MacOS/Claude` executable exists and its plist
+  names that executable, while `codesign --verify --deep --strict` reports an invalid
+  signature. This does not establish the cause of the LaunchServices error. No extension was
+  installed and no Claude prompt or usage was used. Do not download another Claude Desktop
+  app; physical extension acceptance remains blocked until the existing app can launch.
+- A fresh `gh release view` check failed to connect to `api.github.com`; current hosted release
+  availability remains unverified. No push or publication was attempted.
