@@ -168,3 +168,9 @@ shim contract, not a physical Windows installation.
   `kLSNoExecutableErr` (`-10827`). The separate web fetch of the v0.1.0 release page and asset
   returned cache misses, so it did not resolve the hosted-availability check. No chat was
   opened, no Claude usage was spent, and no files were published.
+- The official [MCPB manifest specification](https://github.com/modelcontextprotocol/mcpb/blob/main/MANIFEST.md)
+  defines `user_config` type `directory`, supports `multiple: true` for multi-folder selection,
+  and expands those selected paths into separate argv values. `setup/mcp/manifest.json` uses this
+  mapping for the destination parent and source roots; the package suite checks the mapping and
+  MCPB CLI 2.1.2 validates the manifest schema. This confirms specification alignment, not the
+  actual Claude Desktop settings UI or persisted value expansion.
