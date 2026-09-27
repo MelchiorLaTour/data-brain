@@ -119,6 +119,11 @@ shim contract, not a physical Windows installation.
   `6251e855b8070b632b8de1b291d635cb25baa4754d37bc771a71a7e4d481ede2`; its adjacent checksum
   verifies, and MCPB CLI 2.1.2 validates the manifest and identifies the archive as unsigned.
   It remains version 0.1.0 and is not published as a corrected release.
+- Two further clean-source builds produced byte-identical MCPBs at revision
+  `2f17e99`; current candidate SHA-256 is
+  `297de7b004ee9ddebbf5b1d6e28c77dea84e873acad645fdf7aeb3d836e64fe3`. The adjacent checksum,
+  MCPB manifest validation, and archive inspection all pass. This candidate also remains
+  version 0.1.0 pending the release-version decision.
 - `python3 -m unittest discover -s windows/tests -v` passed both Windows-shim tests; this is
   still not a native Windows installation test. The three maintained guides rerendered to
   one-page US Letter PDFs with selectable text under `/private/tmp/databrain-guides-resume-8bxhoged/`.
