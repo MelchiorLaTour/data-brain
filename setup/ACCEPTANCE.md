@@ -119,6 +119,12 @@ shim contract, not a physical Windows installation.
   `6251e855b8070b632b8de1b291d635cb25baa4754d37bc771a71a7e4d481ede2`; its adjacent checksum
   verifies, and MCPB CLI 2.1.2 validates the manifest and identifies the archive as unsigned.
   It remains version 0.1.0 and is not published as a corrected release.
+- `python3 -m unittest discover -s windows/tests -v` passed both Windows-shim tests; this is
+  still not a native Windows installation test. The three maintained guides rerendered to
+  one-page US Letter PDFs with selectable text under `/private/tmp/databrain-guides-resume-8bxhoged/`.
+  The app guide retained its single setup prompt and prerelease warning, omitted Terminal
+  instructions, and its PDF URI annotations point to the v0.1.0 MCPB and Anthropic help page.
+  These are static-render checks, not app acceptance; final user PDFs remain withheld.
 - A no-prompt install attempt against the existing `/Applications/Claude.app` failed:
   `open -a /Applications/Claude.app <databrain.mcpb>` returned LaunchServices
   `kLSNoExecutableErr`. The bundle's `Contents/MacOS/Claude` executable exists and its plist
