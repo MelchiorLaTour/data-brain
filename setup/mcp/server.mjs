@@ -240,7 +240,16 @@ function startJob(kind, task) {
   };
   activeJobs.set(id, job);
   Promise.resolve().then(() => task(job)).then(
-    message => { job.status = 'complete'; job.message = message; job.finishedAt = new Date().toISOString(); },
+    result => {
+      if (result && typeof result === 'object' && result.status === 'cancelled' && typeof result.message === 'string') {
+        job.status = 'cancelled';
+        job.message = result.message;
+      } else {
+        job.status = 'complete';
+        job.message = result;
+      }
+      job.finishedAt = new Date().toISOString();
+    },
     error => { job.status = job.cancelled ? 'cancelled' : 'failed'; job.message = job.cancelled ? 'Cancelled; original source files remain unchanged.' : (error.message || 'Operation failed.'); job.finishedAt = new Date().toISOString(); },
   );
   return job;
@@ -249,6 +258,13 @@ function startJob(kind, task) {
 async function openFolderPicker(mode, job) {
   if (process.env.DATABRAIN_TEST_HOME && process.env.DATABRAIN_TEST_SELECTION_FILE) {
     const raw = await fs.readFile(process.env.DATABRAIN_TEST_SELECTION_FILE, 'utf8');
+    if (raw.trimStart().startsWith('{')) {
+      const selected = JSON.parse(raw);
+      if (selected?.cancelled === true) return { cancelled: true, paths: [] };
+      if (!Array.isArray(selected?.paths)) throw new Error('Invalid disposable test folder selection.');
+      if (selected.paths.some(folder => !path.isAbsolute(folder))) throw new Error('Invalid disposable test folder selection.');
+      return { cancelled: false, paths: selected.paths };
+    }
     const paths = raw.includes('\0') ? raw.split('\0').filter(Boolean) : raw.split('\n').filter(Boolean);
     if (paths.some(folder => !path.isAbsolute(folder))) throw new Error('Invalid disposable test folder selection.');
     return { cancelled: false, paths };
@@ -465,7 +481,7 @@ async function beginDestinationSelection() {
     let parent;
     if (process.env.DATABRAIN_TEST_SELECTION_FILE && !selectedParent) {
       const selected = await openFolderPicker('destination-parent', current);
-      if (selected.cancelled) return 'Selection cancelled; no folder was created.';
+      if (selected.cancelled) return { status: 'cancelled', message: 'Selection cancelled; no folder was created.' };
       if (selected.paths.length !== 1) throw new Error('Choose exactly one destination parent folder.');
       parent = validateSelectedFolder(selected.paths[0]);
       if (parent !== path.resolve(desktop)) throw new Error('Choose Desktop in the folder chooser to use the requested Desktop/DataBrain location.');

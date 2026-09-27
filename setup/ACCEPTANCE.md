@@ -174,3 +174,11 @@ shim contract, not a physical Windows installation.
   mapping for the destination parent and source roots; the package suite checks the mapping and
   MCPB CLI 2.1.2 validates the manifest schema. This confirms specification alignment, not the
   actual Claude Desktop settings UI or persisted value expansion.
+- The latest `bash setup/tests/test_mcp_package.sh` run on the current worktree exited 0. The
+  onboarding fixture now cancels the destination chooser and confirms no DataBrain folder, setup
+  state, or source grant is created. The data-route fixture marks one disposable file as a cloud
+  placeholder through path-scoped metadata shims; MCP setup reports it, derives searchable
+  keywords, writes the expected text sidecar, and permits a scoped read. This exercises the
+  engine's selected-placeholder extraction branch, not real iCloud hydration/re-eviction. No
+  physical Claude Desktop test or release was performed. These source/test edits remain uncommitted
+  and do not change the published v0.1.0 artifact.

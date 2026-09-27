@@ -34,6 +34,12 @@ const noteRace = {
   signal: `${dataHome}.note-race-signal`,
   release: `${dataHome}.note-race-release`,
 };
+const cloudFixtureRoot = path.join(path.dirname(dataHome), 'Cloud placeholder source');
+const cloudFixture = path.join(cloudFixtureRoot, 'cloud-placeholder-fixture.txt');
+const runtimeBin = path.join(path.dirname(serverScript), 'runtime', 'bin');
+const cloudLsShim = path.join(runtimeBin, 'ls');
+const cloudStatShim = path.join(runtimeBin, 'stat');
+let cloudShimsInstalled = false;
 await fs.writeFile(selectionFile, `${retainedRoot}\n`, { mode: 0o600 });
 let server;
 let stderr = '';
@@ -814,6 +820,90 @@ try {
   }
   assert(emptyOnlyStatus.includes('Stage: taxonomy pending') && emptyOnlyStatus.includes('Indexed rows: 0.'), `empty-only setup did not report its completed inventory: ${emptyOnlyStatus}`);
   assert(emptyOnlyStatus.includes('No eligible files were found') && emptyOnlyStatus.includes('databrain_add_sources'), `empty-only setup did not give a clear recovery action: ${emptyOnlyStatus}`);
+
+  // Exercise the cloud-placeholder branch with one disposable file. The shims report
+  // dataless metadata only for this exact fixture path; every other ls/stat call delegates
+  // to the host binaries. This is deterministic branch evidence, not physical iCloud proof.
+  await fs.mkdir(cloudFixtureRoot, { recursive: true });
+  await fs.writeFile(cloudFixture, 'CLOUD_PLACEHOLDER_BODY_SENTINEL must never enter RAG content.\n');
+  await fs.mkdir(runtimeBin, { recursive: true });
+  await assert.rejects(fs.lstat(cloudLsShim), { code: 'ENOENT' }, 'cloud fixture would overwrite an existing ls runtime shim');
+  await assert.rejects(fs.lstat(cloudStatShim), { code: 'ENOENT' }, 'cloud fixture would overwrite an existing stat runtime shim');
+  await fs.writeFile(cloudLsShim, [
+    '#!/bin/bash',
+    'if [ "$#" -eq 2 ] && [ "$1" = "-lO" ] && [ "$2" = "$DATABRAIN_CLOUD_PLACEHOLDER" ]; then',
+    '  /bin/ls -l "$2"',
+    '  printf "flags: dataless\\n"',
+    'else',
+    '  exec /bin/ls "$@"',
+    'fi',
+    '',
+  ].join('\n'), { mode: 0o755 });
+  await fs.writeFile(cloudStatShim, [
+    '#!/bin/bash',
+    'if [ "$#" -eq 3 ] && [ "$1" = "-f" ] && [ "$2" = "%Sf" ] && [ "$3" = "$DATABRAIN_CLOUD_PLACEHOLDER" ]; then',
+    '  printf "dataless\\n"',
+    'else',
+    '  exec /usr/bin/stat "$@"',
+    'fi',
+    '',
+  ].join('\n'), { mode: 0o755 });
+  cloudShimsInstalled = true;
+  // Restart the disposable server so child engine processes inherit the path-scoped shim target.
+  process.env.DATABRAIN_CLOUD_PLACEHOLDER = cloudFixture;
+  const cloudServer = server;
+  const cloudServerClosed = new Promise(resolve => cloudServer.once('close', resolve));
+  cloudServer.kill('SIGTERM');
+  await cloudServerClosed;
+  server = startServer();
+  const cloudInit = await request(29, 'initialize', { protocolVersion: '2025-03-26' });
+  assert.equal(cloudInit.result.serverInfo.name, 'databrain');
+  server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
+  await fs.writeFile(selectionFile, `${cloudFixtureRoot}\n`, { mode: 0o600 });
+  const selectCloudRoot = await request(23, 'tools/call', { name: 'databrain_select_sources', arguments: {} });
+  assert(selectCloudRoot.result.content[0].text.includes('folder chooser is open'), `cloud fixture source selection did not start: ${selectCloudRoot.result.content[0].text}`);
+  let cloudSelectionStatus = '';
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    const reply = await request(1800 + attempt, 'tools/call', { name: 'databrain_setup_status', arguments: {} });
+    cloudSelectionStatus = reply.result.content[0].text;
+    if (cloudSelectionStatus.includes('Selected source folders: 1.') && cloudSelectionStatus.includes('source folder selection: complete')) break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert(cloudSelectionStatus.includes('Selected source folders: 1.') && cloudSelectionStatus.includes('source folder selection: complete'), `cloud fixture source selection did not finish: ${cloudSelectionStatus}`);
+  const cloudSetup = await request(24, 'tools/call', { name: 'databrain_setup_run', arguments: {} });
+  assert(cloudSetup.result.content[0].text.includes('Indexing started'), `cloud fixture indexing did not start: ${cloudSetup.result.content[0].text}`);
+  let cloudSetupStatus = '';
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const reply = await request(1900 + attempt, 'tools/call', { name: 'databrain_setup_status', arguments: {} });
+    cloudSetupStatus = reply.result.content[0].text;
+    if (cloudSetupStatus.includes('Stage: taxonomy pending')) break;
+    if (cloudSetupStatus.includes('initial indexing: failed')) break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert(cloudSetupStatus.includes('Stage: taxonomy pending'), `cloud fixture indexing did not finish: ${cloudSetupStatus}`);
+  assert.match(cloudSetupStatus, /File inventory: 1 indexed, 0 eligible missing from index, 0 unsupported; unreadable 0, cloud placeholders 1, empty 0, traversal errors 0\./, `setup status did not report the cloud placeholder: ${cloudSetupStatus}`);
+  const cloudHealth = await request(25, 'tools/call', { name: 'databrain_health', arguments: {} });
+  assert.match(cloudHealth.result.content[0].text, /File inventory: 1 indexed; 0 eligible missing; 0 unsupported; unreadable 0; placeholders 1; empty 0; traversal errors 0\./, `health did not report the cloud placeholder: ${cloudHealth.result.content[0].text}`);
+  const cloudIndex = await fs.readFile(path.join(dataHome, 'moc', 'index.tsv'), 'utf8');
+  const cloudIndexRow = cloudIndex.split('\n').find(line => line.startsWith(`${cloudFixture}\t`));
+  assert(cloudIndexRow, 'cloud placeholder path was not inventoried in the index');
+  assert(!cloudIndex.includes('CLOUD_PLACEHOLDER_BODY_SENTINEL'), 'cloud placeholder body entered the generated index');
+  assert(cloudIndexRow.split('\t')[3].split(',').includes('sentinel'), `cloud placeholder content was not used to derive search keywords: ${cloudIndexRow}`);
+  const cloudExtract = path.join(dataHome, 'moc', 'extracted', `${createHash('sha1').update(cloudFixture).digest('hex').slice(0, 16)}.txt`);
+  const cloudExtractText = await fs.readFile(cloudExtract, 'utf8');
+  assert(cloudExtractText.includes('CLOUD_PLACEHOLDER_BODY_SENTINEL'), 'cloud placeholder body was not preserved in its derived text sidecar');
+  const cloudBodySearch = await request(26, 'tools/call', { name: 'databrain_search', arguments: { query: 'sentinel' } });
+  assert(cloudBodySearch.result.content[0].text.includes(cloudFixture), `cloud placeholder body was not searchable after extraction: ${cloudBodySearch.result.content[0].text}`);
+  const cloudTitleSearch = await request(27, 'tools/call', { name: 'databrain_search', arguments: { query: 'cloud placeholder fixture' } });
+  assert(cloudTitleSearch.result.content[0].text.includes(cloudFixture), `cloud placeholder title/path was not retained as an inventory lead: ${cloudTitleSearch.result.content[0].text}`);
+  const cloudRead = await request(28, 'tools/call', { name: 'databrain_read', arguments: { path: cloudFixture, chars: 1200 } });
+  assert(cloudRead.result.content[0].text.includes('CLOUD_PLACEHOLDER_BODY_SENTINEL'), `selected cloud placeholder body was not safely readable: ${cloudRead.result.content[0].text}`);
+  delete process.env.DATABRAIN_CLOUD_PLACEHOLDER;
+  await fs.rm(cloudLsShim, { force: true });
+  await fs.rm(cloudStatShim, { force: true });
+  cloudShimsInstalled = false;
+  await fs.rm(cloudFixtureRoot, { recursive: true, force: true });
+  assert(cloudSetupStatus.includes('cloud placeholders 1'), 'cloud placeholder fixture did not reach setup status');
   console.log('PASS: MCP selected-root search/read, root-swap read/write rejection, empty-corpus recovery, extraction-sidecar confinement, interrupted-index cancellation/restart/resume, relationship cancellation, and capture/note/synthesis write-back use the shared engine with scoped new-file creation and indexed keywords.');
 } catch (error) {
   throw new Error(`${error.message}${stderr ? `\nMCP stderr: ${stderr}` : ''}`);
@@ -823,4 +913,10 @@ try {
   await fs.rm(selectionFile, { force: true });
   await Promise.all([openRace.arm, openRace.signal, openRace.release].map(file => fs.rm(file, { force: true })));
   await Promise.all([rootRace.arm, rootRace.signal, rootRace.release, noteRace.arm, noteRace.signal, noteRace.release].map(file => fs.rm(file, { force: true })));
+  delete process.env.DATABRAIN_CLOUD_PLACEHOLDER;
+  if (cloudShimsInstalled) {
+    await fs.rm(cloudLsShim, { force: true });
+    await fs.rm(cloudStatShim, { force: true });
+  }
+  await fs.rm(cloudFixtureRoot, { recursive: true, force: true });
 }
