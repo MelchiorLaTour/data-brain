@@ -134,7 +134,9 @@ shim contract, not a physical Windows installation.
   `open -a /Applications/Claude.app <databrain.mcpb>` returned LaunchServices
   `kLSNoExecutableErr`. The bundle's `Contents/MacOS/Claude` executable exists and its plist
   names that executable, while `codesign --verify --deep --strict` reports an invalid
-  signature. This does not establish the cause of the LaunchServices error. No extension was
+  signature and `spctl --assess` reports an internal code-signing error. This does not establish
+  the cause of the LaunchServices error. A bounded search found no second Claude.app in
+  `/Applications` or `~/Applications`, and no Claude DMG/PKG/ZIP in Downloads. No extension was
   installed and no Claude prompt or usage was used. Do not download another Claude Desktop
   app; physical extension acceptance remains blocked until the existing app can launch.
 - A fresh `gh release view` check failed to connect to `api.github.com`; current hosted release
