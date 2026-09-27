@@ -200,3 +200,9 @@ shim contract, not a physical Windows installation.
   version 0.1.0, required entry point, and no-corpus-dictionary rule. A current `curl -I` check of
   the public GitHub release failed with `Could not resolve host: github.com` (exit 6), so this
   environment cannot verify the live release. That does not prove GitHub is unreachable elsewhere.
+- The maintained connection-help source rendered to one US Letter page at
+  `/private/tmp/databrain-guides-finalcheck.BSqyj2/connection.pdf`; extracted text retains the
+  new-chat, Connectors, Developer settings, and narrow-permission recovery steps, and its link
+  annotation targets Anthropic help. The current [Claude local MCP help](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
+  documents the same custom-install path, `+` > Connectors check, and Developer settings/logs
+  location. This is verified guide wording, not physical Desktop acceptance.
