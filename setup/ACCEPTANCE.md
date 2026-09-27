@@ -149,17 +149,20 @@ shim contract, not a physical Windows installation.
   checks the exact installed-version tag, including prereleases. The description now matches
   that behavior and names the release-tag/source-commit check. `bash setup/tests/test_mcp_package.sh`
   exited 0 after the correction, including the prerelease audit fixtures and synthetic
-  50-file/10-category setup/retrieval. The pre-commit local version-0.1.0 test candidate had
-  SHA-256 `f4ab7a86c84c9c530b192aa2d53c0b7f64c3833cd599c0d63d2d8c106e78eaea`; build info
-  recorded source revision `003a83e` and `source_tree=dirty` because the description correction
-  was uncommitted. Two consecutive builds from that source state produced the same SHA-256.
-  Rebuild from a clean committed revision before preparing any release.
-  Offline MCPB CLI 2.1.2 `validate setup/mcp/manifest.json` passes and `info` identifies the
-  archive as unsigned. Current app, Terminal, and connection-help PDFs each rerender to one US
+  50-file/10-category setup/retrieval. The current local version-0.1.0 test candidate was rebuilt
+  from clean source commit `820fd4c78c74eaf21d05aa63b7ae48b412621ccf`; build info records
+  `source_tree=clean` and staged-source digest
+  `b58fdd8d8607ecb6d455ab879dda2b8dc6ab7f9931135cec4f498fa447f05231`. Its SHA-256 is
+  `d8378d644f828f5a99f3340ec0a8ee153cc9c3a528c5856e89181850dac74bd9`, matched by the adjacent
+  checksum file; a second clean-source build during the full-suite run produced the same digest.
+  The full package suite exits 0 against this clean-source build; focused
+  prerelease-audit and protocol tests also pass. Offline MCPB CLI 2.1.2 `validate
+  setup/mcp/manifest.json` passes and `info` identifies the archive as unsigned. Current app,
+  Terminal, and connection-help PDFs each rerender to one US
   Letter page under `/private/tmp/databrain-guides-current.V96fw8/`; extracted app text retains
   download-before-install order, the single setup prompt, and prerelease warning, and `pdftohtml`
   confirms the MCPB and official Claude Help Center link targets. These are static checks only.
-  It is a local test candidate, not a corrected published release. Physical Claude Desktop
+  It remains version 0.1.0 and is not a corrected published release. Physical Claude Desktop
   acceptance, corrected versioned publication, and live download recheck remain open. A fresh
   no-prompt `open -a /Applications/Claude.app` retry again failed with LaunchServices
   `kLSNoExecutableErr` (`-10827`). The separate web fetch of the v0.1.0 release page and asset
