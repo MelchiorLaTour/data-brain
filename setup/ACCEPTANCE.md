@@ -182,10 +182,10 @@ shim contract, not a physical Windows installation.
   engine's selected-placeholder extraction branch, not real iCloud hydration/re-eviction. No
   physical Claude Desktop test or release was performed. The code, tests, guide note, and evidence
   update are committed locally as `1152469`.
-- `bash setup/packaging/build.sh` then rebuilt the ignored local candidate from clean commit
-  `1152469d66a91f966e9f5898ad9341146eb839b5`; `source_tree=clean` and staged-source SHA-256 is
-  `a71311af12604940b98becf4f3d2a122b6d4aaa624ee5750b74d42b4058be322`. The package SHA-256 is
-  `110f1f5aceacc0016641719ef0cf0586b25cac76aac8eaf97cfa8d9fc7d2cb01`, matching its adjacent
+- `bash setup/packaging/build.sh` rebuilt the ignored local candidate from clean repository
+  snapshot `247d0bba2f6f4893d91be895a0604e460ff316f2`; `source_tree=clean` and staged-source
+  SHA-256 is `a71311af12604940b98becf4f3d2a122b6d4aaa624ee5750b74d42b4058be322`. Package SHA-256
+  is `b29dcac4b2cbf4896861ad001bf3b7d6ddcf843fd950d82570b3ed0051dbe471`, matching its adjacent
   checksum. Offline MCPB CLI validation passes and archive inspection reports 200.86 KB, unsigned.
   It remains version 0.1.0, is not the published artifact, and is not approved for release.
 - A fresh web open of the published v0.1.0 GitHub release page returned `Cache miss`; hosted
