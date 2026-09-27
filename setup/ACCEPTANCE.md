@@ -206,6 +206,9 @@ shim contract, not a physical Windows installation.
   annotation targets Anthropic help. The current [Claude local MCP help](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
   documents the same custom-install path, `+` > Connectors check, and Developer settings/logs
   location. This is verified guide wording, not physical Desktop acceptance.
+- Raster previews of the app, Terminal, and connection-help PDFs were visually inspected at
+  100 dpi. The text stays within the page bounds and no missing glyphs or obvious clipping were
+  visible; this checks the maintained review PDFs, not the stale copies already in Downloads.
 - Downloads still contains `/Users/melchior/Downloads/Databrain-MCP-App-Setup-Guide.pdf`, a
   two-page older guide last modified 2026-09-25 (SHA-256
   `5892cf1347f4599b42bad8dfe4fd96e4a852d2a448eb5432ad9a548d0979d573`). Its text describes a
