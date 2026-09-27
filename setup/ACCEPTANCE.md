@@ -27,7 +27,7 @@ pilot identifiers; the packaged engine retains its sensitive-path exclusion rule
   and identifiers. `setup/README.md` retains the prototype asset inventory for maintainer
   provenance; that inventory is not an end-user install instruction.
 - Signing: the local package is unsigned. The latest published MCPB CLI remains 2.1.2;
-  signature-fix PRs #195 and #222 are still open, alongside reports that `mcpb sign` output
+  signature-related PR #195 (verification) and PR #222 (enterprise HSM signing workflow) remain open, alongside reports that `mcpb sign` output
   is rejected by Claude Desktop's strict ZIP parser
   ([#278](https://github.com/modelcontextprotocol/mcpb/issues/278)) and that `mcpb verify`
   does not cryptographically verify signatures ([#260](https://github.com/modelcontextprotocol/mcpb/issues/260)).
