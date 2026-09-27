@@ -103,8 +103,9 @@ brains, indexes, and user documents never belong here.
   plausible traps surfaced candidates on a read-first route. These synthetic checks do not
   prove Claude-generated query quality, held-out recall, answer correctness, citations, or
   model judgment. Those retrieval-readiness checks remain open. Maintained HTML sources exist for the app guide, Terminal guide,
-  and pre-connection recovery card. The app source now points to the verified v0.1.0 prerelease;
-  an explicitly unverified one-page guide review is saved under `/private/tmp/databrain-review/`.
+  and pre-connection recovery card. The app source points to the published, explicitly unverified
+  v0.1.0 prerelease; a corrected package is only a local candidate and is not published.
+  The explicitly unverified one-page guide review is saved under `/private/tmp/databrain-review/`.
   Final accepted-product guides remain blocked on physical Claude Desktop acceptance. See
   `PARITY.md` and `ACCEPTANCE.md`.
 - The dirty prototype remains untouched and is not a substitute; it requires a prebuilt

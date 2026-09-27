@@ -9,7 +9,8 @@ terminal engine uses bash and sqlite FTS5 without a model call or network connec
 [v0.1.0 prerelease](https://github.com/MelchiorLaTour/data-brain/releases/tag/v0.1.0). Its
 package and synthetic local tests pass; installation in Claude Desktop, Claude-generated
 queries, and held-out answer quality remain unverified. The v0.1.0 install audit also cannot
-match prereleases; a tested source fix awaits a new package. Check the
+match prereleases; a tested source fix is included in an unpublished local package candidate.
+A corrected release still needs a new version and physical app acceptance. Check the
 [acceptance ledger](setup/ACCEPTANCE.md) before using it with personal files. The terminal
 route remains available through [INSTALL.md](INSTALL.md).
 
