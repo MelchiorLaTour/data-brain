@@ -26,16 +26,13 @@ pilot identifiers; the packaged engine retains its sensitive-path exclusion rule
   Terminal, or recovery guide sources, and the package allowlist excludes pilot-specific files
   and identifiers. `setup/README.md` retains the prototype asset inventory for maintainer
   provenance; that inventory is not an end-user install instruction.
-- Signing: the local package is unsigned. The latest published MCPB CLI remains 2.1.2;
-  signature-related PR #195 (verification) and PR #222 (enterprise HSM signing workflow) remain open, alongside reports that `mcpb sign` output
-  is rejected by Claude Desktop's strict ZIP parser
-  ([#278](https://github.com/modelcontextprotocol/mcpb/issues/278)) and that `mcpb verify`
-  does not cryptographically verify signatures ([#260](https://github.com/modelcontextprotocol/mcpb/issues/260)).
-  Do not sign this release with that CLI until the defects are resolved and a signed
-  sign/verify/install round trip passes. Anthropic documents the custom `.mcpb` install path
-  but does not state in its [local MCP help](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
-  whether unsigned custom bundles are acceptable in every supported configuration; confirm
-  this during physical Desktop acceptance.
+- Signing: the local package is unsigned. Anthropic's [custom extension installation steps](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
+  do not list signing as a prerequisite, and the [MCPB CLI documentation](https://github.com/modelcontextprotocol/mcpb/blob/main/CLI.md)
+  says unsigned MCPBs are valid ZIP files. The latest published CLI remains 2.1.2; its
+  signing workflow still has open reports that signed bundles fail Claude Desktop's strict
+  ZIP parser ([#278](https://github.com/modelcontextprotocol/mcpb/issues/278)) and that the
+  CLI does not cryptographically verify signatures ([#260](https://github.com/modelcontextprotocol/mcpb/issues/260)).
+  Keep this package unsigned; confirm its install flow during physical Desktop acceptance.
 - Publication state: the unverified GitHub prerelease `v0.1.0` is live at
   https://github.com/MelchiorLaTour/data-brain/releases/tag/v0.1.0. The MCPB, checksum,
   and build-info assets were downloaded back from GitHub and compared byte-for-byte with
