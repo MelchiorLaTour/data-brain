@@ -26,6 +26,15 @@ pilot identifiers; the packaged engine retains its sensitive-path exclusion rule
   Terminal, or recovery guide sources, and the package allowlist excludes pilot-specific files
   and identifiers. `setup/README.md` retains the prototype asset inventory for maintainer
   provenance; that inventory is not an end-user install instruction.
+- Signing: the local package is unsigned. The upstream MCPB repository currently has open
+  reports that `mcpb sign` output is rejected by Claude Desktop's strict ZIP parser
+  ([#278](https://github.com/modelcontextprotocol/mcpb/issues/278)) and that `mcpb verify`
+  does not cryptographically verify signatures ([#260](https://github.com/modelcontextprotocol/mcpb/issues/260)).
+  Do not sign this release with that CLI until those defects are resolved and a signed
+  sign/verify/install round trip passes. Anthropic documents the custom `.mcpb` install path
+  but does not state in its [local MCP help](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
+  whether unsigned custom bundles are acceptable in every supported configuration; confirm
+  this during physical Desktop acceptance.
 - Publication state: the local MCPB and review PDFs are not a public release. The app guide
   still has a download-link placeholder, no GitHub release exists, and final PDFs remain
   withheld until the required physical app acceptance and live link are available.
