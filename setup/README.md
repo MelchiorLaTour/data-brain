@@ -96,12 +96,13 @@ brains, indexes, and user documents never belong here.
   `test_mcp_multivariant_workflow.mjs` also checks packaged multi-query search, safe read,
   all-absent DRY guidance, and a plausible decoy read-first route; it does not validate
   Claude's query generation, answer judgment, or citations.
-  A fixed synthetic recall exam currently scores Easy 10/10, Medium 8/10, Hard 25/40,
-  and XLING 2/20 against unchanged bars of 10/10, 10/10, 32/40, and 16/20; therefore the
-  package suite fails this recall gate. It also returns no candidates for 10/10 simple
-  absence traps and exposes seeded plausible wrong-hit candidates in 10/10 cases, without
-  judging Claude's abstention. These are synthetic engine results, not held-out or personal
-  corpus acceptance. Retrieval-readiness checks remain incomplete. Maintained HTML sources exist for the app guide, Terminal guide,
+  The single-query diagnostic scores Easy 10/10, Medium 8/10, Hard 23/40, and XLING 2/20,
+  below three unchanged bars. The acceptance route uses 80 frozen query-only variants and
+  scores the union of per-query top-three results: Easy 10/10, Medium 10/10, Hard 40/40,
+  and XLING 16/20, meeting the original bars. Ten all-absent variants stayed DRY; ten
+  plausible traps surfaced candidates on a read-first route. These synthetic checks do not
+  prove Claude-generated query quality, held-out recall, answer correctness, citations, or
+  model judgment. Those retrieval-readiness checks remain open. Maintained HTML sources exist for the app guide, Terminal guide,
   and pre-connection recovery card; temporary review renders pass, but the app download link
   still needs a verified release URL before publication. See
   `PARITY.md` and `ACCEPTANCE.md`.
