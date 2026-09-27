@@ -144,3 +144,24 @@ shim contract, not a physical Windows installation.
   launch.
 - A fresh `gh release view` check failed to connect to `api.github.com`; current hosted release
   availability remains unverified. No push or publication was attempted.
+- Follow-up audit on 2026-09-27 found the `databrain_verify_install` tool description still
+  claimed it compared against the “latest published release,” although the implementation
+  checks the exact installed-version tag, including prereleases. The description now matches
+  that behavior and names the release-tag/source-commit check. `bash setup/tests/test_mcp_package.sh`
+  exited 0 after the correction, including the prerelease audit fixtures and synthetic
+  50-file/10-category setup/retrieval. The pre-commit local version-0.1.0 test candidate had
+  SHA-256 `f4ab7a86c84c9c530b192aa2d53c0b7f64c3833cd599c0d63d2d8c106e78eaea`; build info
+  recorded source revision `003a83e` and `source_tree=dirty` because the description correction
+  was uncommitted. Two consecutive builds from that source state produced the same SHA-256.
+  Rebuild from a clean committed revision before preparing any release.
+  Offline MCPB CLI 2.1.2 `validate setup/mcp/manifest.json` passes and `info` identifies the
+  archive as unsigned. Current app, Terminal, and connection-help PDFs each rerender to one US
+  Letter page under `/private/tmp/databrain-guides-current.V96fw8/`; extracted app text retains
+  download-before-install order, the single setup prompt, and prerelease warning, and `pdftohtml`
+  confirms the MCPB and official Claude Help Center link targets. These are static checks only.
+  It is a local test candidate, not a corrected published release. Physical Claude Desktop
+  acceptance, corrected versioned publication, and live download recheck remain open. A fresh
+  no-prompt `open -a /Applications/Claude.app` retry again failed with LaunchServices
+  `kLSNoExecutableErr` (`-10827`). The separate web fetch of the v0.1.0 release page and asset
+  returned cache misses, so it did not resolve the hosted-availability check. No chat was
+  opened, no Claude usage was spent, and no files were published.
