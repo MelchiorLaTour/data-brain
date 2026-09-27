@@ -195,3 +195,8 @@ shim contract, not a physical Windows installation.
   app text retains the existing-destination recovery instruction, one setup prompt, and explicit
   prerelease warning; PDF annotations target the published v0.1.0 MCPB and official Claude help.
   This is static document evidence only; the app route is still untested.
+- The local `setup/packaging/databrain.mcpb` itself passes its adjacent SHA-256 check and `unzip -t`;
+  direct extraction matches its embedded build info and the exact 23-file package allowlist,
+  version 0.1.0, required entry point, and no-corpus-dictionary rule. A current `curl -I` check of
+  the public GitHub release failed with `Could not resolve host: github.com` (exit 6), so this
+  environment cannot verify the live release. That does not prove GitHub is unreachable elsewhere.
