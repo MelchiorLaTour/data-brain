@@ -190,3 +190,8 @@ shim contract, not a physical Windows installation.
   It remains version 0.1.0, is not the published artifact, and is not approved for release.
 - A fresh web open of the published v0.1.0 GitHub release page returned `Cache miss`; hosted
   availability remains unverified, not proven down.
+- The maintained app and Terminal HTML guides rerendered to one US Letter page each using
+  `setup/docs/render-guides.py` under `/private/tmp/databrain-guides-finalcheck.BSqyj2/`. Extracted
+  app text retains the existing-destination recovery instruction, one setup prompt, and explicit
+  prerelease warning; PDF annotations target the published v0.1.0 MCPB and official Claude help.
+  This is static document evidence only; the app route is still untested.
