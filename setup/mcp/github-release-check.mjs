@@ -1,4 +1,4 @@
-const API_URL = 'https://api.github.com/repos/MelchiorLaTour/data-brain/releases/latest';
+const RELEASES_API_ROOT = 'https://api.github.com/repos/MelchiorLaTour/data-brain/releases/tags/';
 const COMMIT_API_ROOT = 'https://api.github.com/repos/MelchiorLaTour/data-brain/commits/';
 const GIT_REF_API_ROOT = 'https://api.github.com/repos/MelchiorLaTour/data-brain/git/ref/tags/';
 const TAG_API_ROOT = 'https://api.github.com/repos/MelchiorLaTour/data-brain/git/tags/';
@@ -49,31 +49,36 @@ async function readBoundedText(response, limit) {
 }
 
 export async function checkGitHubRelease({ manifest, build, fetchImpl = fetch, timeoutMs = 5000 }) {
+  if (typeof manifest?.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.version)) {
+    return { state: 'FAIL', detail: 'The installed manifest contains an invalid release version.' };
+  }
+  const expectedTag = `v${manifest.version}`;
+  const releaseApiUrl = `${RELEASES_API_ROOT}${encodeURIComponent(expectedTag)}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(API_URL, {
+    const response = await fetchImpl(releaseApiUrl, {
       headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
       signal: controller.signal,
       redirect: 'error',
     });
-    if (response.status === 404) return { state: 'BLOCKED', detail: 'No published GitHub release is available to compare with this installation.' };
-    if (!response.ok) return { state: 'BLOCKED', detail: `GitHub latest-release check returned HTTP ${response.status}.` };
+    if (response.status === 404) return { state: 'BLOCKED', detail: `No published GitHub release v${manifest.version} is available to compare with this installation.` };
+    if (!response.ok) return { state: 'BLOCKED', detail: `GitHub tagged-release check returned HTTP ${response.status}.` };
     const release = JSON.parse(await readBoundedText(response, 65536));
-    const expectedTag = `v${manifest.version}`;
     if (release.tag_name !== expectedTag || !Array.isArray(release.assets)) {
-      return { state: 'FAIL', detail: `GitHub latest release ${String(release.tag_name || 'has no tag')} does not match installed version ${manifest.version}.` };
+      return { state: 'FAIL', detail: `GitHub release ${String(release.tag_name || 'has no tag')} does not match installed version ${manifest.version}.` };
     }
+    if (release.draft === true) return { state: 'BLOCKED', detail: `GitHub release ${expectedTag} is still a draft.` };
     const requiredAssets = ['databrain.mcpb', 'databrain.mcpb.sha256', 'databrain.buildinfo.txt'];
     const missingAssets = requiredAssets.filter(name => !release.assets.some(item => item.name === name));
     if (missingAssets.length) {
-      return { state: 'BLOCKED', detail: `The latest GitHub release is missing required asset(s): ${missingAssets.join(', ')}.` };
+      return { state: 'BLOCKED', detail: `GitHub release ${expectedTag} is missing required asset(s): ${missingAssets.join(', ')}.` };
     }
     for (const name of requiredAssets) {
       const asset = release.assets.find(item => item.name === name);
       const expectedPath = `${RELEASE_ROOT}${encodeURIComponent(expectedTag)}/${encodeURIComponent(name)}`;
       if (typeof asset.browser_download_url !== 'string') {
-        return { state: 'BLOCKED', detail: `The latest GitHub release has no download URL for ${name}.` };
+        return { state: 'BLOCKED', detail: `GitHub release ${expectedTag} has no download URL for ${name}.` };
       }
       const assetUrl = new URL(asset.browser_download_url);
       if (assetUrl.protocol !== 'https:' || assetUrl.hostname !== 'github.com' || assetUrl.pathname !== expectedPath) {
@@ -98,8 +103,8 @@ export async function checkGitHubRelease({ manifest, build, fetchImpl = fetch, t
     if (published.engine_repository !== REPOSITORY) {
       return { state: 'FAIL', detail: 'GitHub release record names an unexpected source repository.' };
     }
-    if (mismatch) return { state: 'FAIL', detail: `Installed ${mismatch} does not match the latest GitHub release record.` };
-    if (published.source_tree !== 'clean') return { state: 'FAIL', detail: 'The latest GitHub release record is not marked as a clean source build.' };
+    if (mismatch) return { state: 'FAIL', detail: `Installed ${mismatch} does not match GitHub release ${expectedTag}.` };
+    if (published.source_tree !== 'clean') return { state: 'FAIL', detail: `GitHub release ${expectedTag} is not marked as a clean source build.` };
     const commitResponse = await fetchImpl(`${COMMIT_API_ROOT}${encodeURIComponent(build.engine_revision)}`, {
       headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
       signal: controller.signal,

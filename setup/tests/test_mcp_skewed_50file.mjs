@@ -204,14 +204,14 @@ try {
   assert.match(installAudit, /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; bundle root ".+"; loaded version 0\.1\.0; engine revision [0-9a-f]{12}\./);
   assert.match(installAudit, /BLOCKED: Original MCPB archive provenance — Claude Desktop exposes the unpacked extension/);
   assert.match(installAudit, /BLOCKED: Desktop install record and restart/);
-  assert.match(installAudit, /audits that running bundle against the latest public GitHub release build record/);
-  assert.match(installAudit, /offline or before a release record is published/);
+  assert.match(installAudit, /audits that running bundle against the GitHub release build record for its exact manifest version, including prereleases/);
+  assert.match(installAudit, /offline or when the matching versioned release is unavailable/);
   assert(!installAudit.includes('BODY_SENTINEL_'), 'install audit must not return source excerpts');
   process.stdout.write([
     'PASS: isolated packaged MCP setup indexed and inventoried all 50 disposable files.',
     'Taxonomy proposals exposed exactly 10 metadata-only folder groups with counts 20/12/8 plus 2/2/2/1/1/1/1; confirmed index preserved all category counts.',
     'Explicitly selected keyword search: 50/50 files; absent synthetic query: no hits.',
-    'Installed-bundle audit compares against the latest public GitHub release record and checks setup/inventory health, confirmed labels/relationships, one safe search/read, and an absent-query probe; it returns no source excerpts.',
+    'Installed-bundle audit compares against the installed version’s GitHub release record (including prereleases) and checks setup/inventory health, confirmed labels/relationships, one safe search/read, and an absent-query probe; it returns no source excerpts.',
     'Scope: synthetic lexical plumbing only; this does not validate personal-corpus relevance, semantic paraphrase, translation, or plausible false-hit judgment.',
   ].join('\n') + '\n');
 } catch (error) {

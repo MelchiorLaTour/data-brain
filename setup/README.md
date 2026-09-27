@@ -51,7 +51,7 @@ brains, indexes, and user documents never belong here.
   DataBrain MCP process serving this conversation and reports its bundle root, version, and
   engine revision; it compares the running bundle and its
   settings-provided destination/source roots with saved setup, and checks the bundle against
-  the latest public GitHub release's `databrain.buildinfo.txt`,
+  the version-matched public GitHub release's `databrain.buildinfo.txt`, including prereleases,
   confirms the published MCPB/checksum assets, source commit, and version-tag target, then checks
   inventory/index/freshness and confirmed setup metadata, runs one indexed search/read smoke
   probe and an absent-query probe, and returns evidence/status (the short read probe is
@@ -103,8 +103,9 @@ brains, indexes, and user documents never belong here.
   plausible traps surfaced candidates on a read-first route. These synthetic checks do not
   prove Claude-generated query quality, held-out recall, answer correctness, citations, or
   model judgment. Those retrieval-readiness checks remain open. Maintained HTML sources exist for the app guide, Terminal guide,
-  and pre-connection recovery card; temporary review renders pass, but the app download link
-  still needs a verified release URL before publication. See
+  and pre-connection recovery card. The app source now points to the verified v0.1.0 prerelease;
+  an explicitly unverified one-page guide review is saved under `/private/tmp/databrain-review/`.
+  Final accepted-product guides remain blocked on physical Claude Desktop acceptance. See
   `PARITY.md` and `ACCEPTANCE.md`.
 - The dirty prototype remains untouched and is not a substitute; it requires a prebuilt
   brain folder. Physical Claude Desktop acceptance remains separate from local tests.
@@ -120,10 +121,10 @@ brains, indexes, and user documents never belong here.
    `bash setup/packaging/build.sh`; inspect the archive and verify its `.sha256` checksum.
    Attach `databrain.mcpb`, `databrain.mcpb.sha256`, and the generated
    `databrain.buildinfo.txt` as release assets so installed copies can compare their build identity with the published release.
-   The current local package is not a public release.
+   The public v0.1.0 prerelease is unverified; do not replace its tag or assets. Publish corrections under a new package version.
 5. Keep app-route and terminal-route guides separate and retain the pre-connection recovery
-   source. Do not move release PDFs to Downloads until Desktop settings and package behavior have
-   physical acceptance evidence.
+   source. Do not move final release PDFs to Downloads until Desktop settings and package
+   behavior have physical acceptance evidence.
 6. Do not push or publish until Mel approves the reviewed handoff.
 
 ## Shared engine state boundary

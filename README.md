@@ -5,18 +5,19 @@ search, read, and honestly abstain over YOUR notes without moving or editing the
 It stores derived search data, including extracted text, in its own working folder. The
 terminal engine uses bash and sqlite FTS5 without a model call or network connection.
 
-**Claude Desktop release status:** A packaged macOS extension candidate has been built and tested
-with disposable local files. Frozen synthetic query-variant bars pass; Claude-generated
-queries, held-out answer quality, and a physical Claude Desktop install remain unverified.
-There is no verified public download yet. See the
-[acceptance ledger](setup/ACCEPTANCE.md) before distributing the package. The terminal route
-remains available through [INSTALL.md](INSTALL.md).
+**Claude Desktop release status:** The macOS extension is available as an explicitly unverified
+[v0.1.0 prerelease](https://github.com/MelchiorLaTour/data-brain/releases/tag/v0.1.0). Its
+package and synthetic local tests pass; installation in Claude Desktop, Claude-generated
+queries, and held-out answer quality remain unverified. The v0.1.0 install audit also cannot
+match prereleases; a tested source fix awaits a new package. Check the
+[acceptance ledger](setup/ACCEPTANCE.md) before using it with personal files. The terminal
+route remains available through [INSTALL.md](INSTALL.md).
 
 ## Compatibility
 
 The terminal setup targets Claude Code on macOS. A separate Claude Desktop extension is
-under local acceptance testing; it has not passed a physical install or been published.
-Its package, setup flow, tests, and current limits are described in
+published as an unverified prerelease; it has not passed a physical install. Its package,
+setup flow, tests, and current limits are described in
 [setup/README.md](setup/README.md). [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) describes
 the older terminal integration; use the acceptance ledger above for the extension's status.
 
@@ -115,8 +116,8 @@ honestly say "not in the brain" instead of guessing.
   spread over messy roots.
 - **Your notes live in cloud apps** (Notion, Evernote, Apple Notes without export). The engine
   indexes *files on disk*. Export first or look elsewhere.
-- **You need a published Claude Desktop download today.** The extension has not passed its
-  release gates or been published yet.
+- **You require a physically verified Claude Desktop extension.** The available v0.1.0
+  prerelease has not been installed in Claude Desktop or checked against a real corpus.
 
 ## Security notes
 
@@ -161,10 +162,12 @@ reproduced; treat them as existence proofs, not benchmarks.
 
 ## Install
 
-The Claude Desktop extension is still a local candidate. Its intended first-run flow is one
-`.mcpb` download, installation through Claude Desktop's Extensions settings, and a new chat
-with **“Set up my DataBrain.”** Do not treat the local candidate as a verified release; see
-[setup/README.md](setup/README.md) for the package and test status.
+The Claude Desktop extension is available as an unverified
+[v0.1.0 prerelease](https://github.com/MelchiorLaTour/data-brain/releases/tag/v0.1.0). Its
+intended first-run flow is one `.mcpb` download, installation through Claude Desktop's
+Extensions settings, and a new chat with **“Set up my DataBrain.”** Physical installation,
+restart, and real-corpus retrieval remain unverified; see [setup/README.md](setup/README.md)
+for package and test status.
 
 The established terminal installation is two layers:
 
