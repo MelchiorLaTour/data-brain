@@ -180,5 +180,13 @@ shim contract, not a physical Windows installation.
   placeholder through path-scoped metadata shims; MCP setup reports it, derives searchable
   keywords, writes the expected text sidecar, and permits a scoped read. This exercises the
   engine's selected-placeholder extraction branch, not real iCloud hydration/re-eviction. No
-  physical Claude Desktop test or release was performed. These source/test edits remain uncommitted
-  and do not change the published v0.1.0 artifact.
+  physical Claude Desktop test or release was performed. The code, tests, guide note, and evidence
+  update are committed locally as `1152469`.
+- `bash setup/packaging/build.sh` then rebuilt the ignored local candidate from clean commit
+  `1152469d66a91f966e9f5898ad9341146eb839b5`; `source_tree=clean` and staged-source SHA-256 is
+  `a71311af12604940b98becf4f3d2a122b6d4aaa624ee5750b74d42b4058be322`. The package SHA-256 is
+  `110f1f5aceacc0016641719ef0cf0586b25cac76aac8eaf97cfa8d9fc7d2cb01`, matching its adjacent
+  checksum. Offline MCPB CLI validation passes and archive inspection reports 200.86 KB, unsigned.
+  It remains version 0.1.0, is not the published artifact, and is not approved for release.
+- A fresh web open of the published v0.1.0 GitHub release page returned `Cache miss`; hosted
+  availability remains unverified, not proven down.
