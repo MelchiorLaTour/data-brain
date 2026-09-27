@@ -136,8 +136,11 @@ shim contract, not a physical Windows installation.
   names that executable, while `codesign --verify --deep --strict` reports an invalid
   signature and `spctl --assess` reports an internal code-signing error. This does not establish
   the cause of the LaunchServices error. A bounded search found no second Claude.app in
-  `/Applications` or `~/Applications`, and no Claude DMG/PKG/ZIP in Downloads. No extension was
-  installed and no Claude prompt or usage was used. Do not download another Claude Desktop
-  app; physical extension acceptance remains blocked until the existing app can launch.
+  `/Applications` or `~/Applications`, and no Claude DMG/PKG/ZIP in Downloads, Claude's
+  Application Support folder, or the checked Caches tree. MCPB CLI 2.1.2 has package/build
+  commands but no Claude Desktop install command, so it cannot substitute for a working app.
+  No extension was installed and no Claude prompt or usage was used. Do not download another
+  Claude Desktop app; physical extension acceptance remains blocked until the existing app can
+  launch.
 - A fresh `gh release view` check failed to connect to `api.github.com`; current hosted release
   availability remains unverified. No push or publication was attempted.
