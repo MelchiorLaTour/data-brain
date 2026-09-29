@@ -1,7 +1,10 @@
 # DataBrain app setup work
 
-This directory tracks the Claude Desktop extension work. It is separate from the
-terminal installation path in the repository root. The engine remains shared; generated
+This directory tracks the Claude Desktop extension and OpenAI client work. The current local
+OpenAI bundle is designed for the Codex view inside the new ChatGPT desktop app; it is not a
+local server for ChatGPT Chat/Work, whose custom MCP apps connect to remote servers. The final
+OpenAI surface and operating-system scope are pending user selection. This is separate from
+the terminal installation path in the repository root. The engine remains shared; generated
 brains, indexes, and user documents never belong here.
 
 ## Current state

@@ -22,6 +22,21 @@ setup flow, tests, and current limits are described in
 [setup/README.md](setup/README.md). [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) describes
 the older terminal integration; use the acceptance ledger above for the extension's status.
 
+### OpenAI clients
+
+The intended novice route is to paste [this repository link](https://github.com/MelchiorLaTour/data-brain)
+into ChatGPT desktop's Codex view and ask it to download and set up DataBrain. **That route
+is not available yet:** the local Codex bundle is not a signed public download and has not
+passed physical ChatGPT desktop or CLI acceptance. The local server requires a Codex Local
+chat in a local project; ordinary Chat/Quick chat and ChatGPT Work do not provide this local
+MCP route. Codex auto-discovers `AGENTS.md` from the primary local-project folder, so a pasted
+GitHub URL alone does not attach the repository or load its instructions. The first-turn
+clone/read/bootstrap handoff is unverified, and this project-selection step means the strict
+"paste one link into any ChatGPT chat" target is not met yet. Review the
+[ChatGPT desktop guide](setup/codex/CHATGPT-DESKTOP.md),
+[Codex CLI guide](setup/codex/CLI.md), and
+[Codex acceptance ledger](setup/CODEX-ACCEPTANCE.md) for current limits.
+
 ## Architecture
 
 ## Use visualization
