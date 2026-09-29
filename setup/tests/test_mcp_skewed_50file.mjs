@@ -207,7 +207,7 @@ try {
   assert.match(installAudit, /Installed DataBrain audit: PARTIAL — inspect failed or blocked checks below\./, installAudit);
   assert.match(installAudit, launcher
     ? /PARTIAL: Package identity — DataBrain Codex 0\.1\.0 \(darwin-(?:arm64|x64)\); .*app payload and source digest match/
-    : /(PASS|PARTIAL): Package identity — DataBrain 0\.1\.0; packaged files match their embedded digest/);
+    : /(PASS|PARTIAL): Package identity — DataBrain \d+\.\d+\.\d+; packaged files match their embedded digest/);
   assert.match(installAudit, /https:\/\/github\.com\/MelchiorLaTour\/data-brain\.git @ [0-9a-f]{12}/);
   assert.match(installAudit, /PASS: Selected-source health/);
   assert.match(installAudit, /(PASS|FAIL|BLOCKED): GitHub release match/);
@@ -216,7 +216,7 @@ try {
   assert.match(installAudit, /PASS: Absent-query probe/);
   assert.match(installAudit, launcher
     ? /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; package root ".+"; loaded version 0\.1\.0; engine revision [0-9a-f]{12}\./
-    : /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; bundle root ".+"; loaded version 0\.1\.0; engine revision [0-9a-f]{12}\./);
+    : /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; bundle root ".+"; loaded version \d+\.\d+\.\d+; engine revision [0-9a-f]{12}\./);
   assert.match(installAudit, launcher
     ? /BLOCKED: Original ZIP archive provenance — The active MCP process/
     : /BLOCKED: Original MCPB archive provenance — Claude Desktop exposes the unpacked extension/);
