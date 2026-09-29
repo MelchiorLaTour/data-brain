@@ -48,11 +48,16 @@ async function readBoundedText(response, limit) {
   return text + decoder.decode();
 }
 
-export async function checkGitHubRelease({ manifest, build, fetchImpl = fetch, timeoutMs = 5000 }) {
-  if (typeof manifest?.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.version)) {
+export async function checkGitHubRelease({ manifest, packageInfo, build, fetchImpl = fetch, timeoutMs = 5000 }) {
+  const packageKind = packageInfo?.kind === 'codex' ? 'codex' : 'claude';
+  const version = packageKind === 'codex' ? packageInfo.version : manifest?.version;
+  if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
     return { state: 'FAIL', detail: 'The installed manifest contains an invalid release version.' };
   }
-  const expectedTag = `v${manifest.version}`;
+  if (packageKind === 'codex' && !['darwin-arm64', 'darwin-x64'].includes(packageInfo.architecture)) {
+    return { state: 'FAIL', detail: 'The installed Codex bundle contains an unsupported architecture.' };
+  }
+  const expectedTag = `v${version}`;
   const releaseApiUrl = `${RELEASES_API_ROOT}${encodeURIComponent(expectedTag)}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -66,10 +71,13 @@ export async function checkGitHubRelease({ manifest, build, fetchImpl = fetch, t
     if (!response.ok) return { state: 'BLOCKED', detail: `GitHub tagged-release check returned HTTP ${response.status}.` };
     const release = JSON.parse(await readBoundedText(response, 65536));
     if (release.tag_name !== expectedTag || !Array.isArray(release.assets)) {
-      return { state: 'FAIL', detail: `GitHub release ${String(release.tag_name || 'has no tag')} does not match installed version ${manifest.version}.` };
+      return { state: 'FAIL', detail: `GitHub release ${String(release.tag_name || 'has no tag')} does not match installed version ${version}.` };
     }
     if (release.draft === true) return { state: 'BLOCKED', detail: `GitHub release ${expectedTag} is still a draft.` };
-    const requiredAssets = ['databrain.mcpb', 'databrain.mcpb.sha256', 'databrain.buildinfo.txt'];
+    const codexStem = `databrain-codex-${version}-${packageInfo?.architecture}`;
+    const requiredAssets = packageKind === 'codex'
+      ? [`${codexStem}.zip`, `${codexStem}.zip.sha256`, `${codexStem}.buildinfo.txt`]
+      : ['databrain.mcpb', 'databrain.mcpb.sha256', 'databrain.buildinfo.txt'];
     const missingAssets = requiredAssets.filter(name => !release.assets.some(item => item.name === name));
     if (missingAssets.length) {
       return { state: 'BLOCKED', detail: `GitHub release ${expectedTag} is missing required asset(s): ${missingAssets.join(', ')}.` };
@@ -85,7 +93,8 @@ export async function checkGitHubRelease({ manifest, build, fetchImpl = fetch, t
         return { state: 'FAIL', detail: `GitHub returned an unexpected release-asset URL for ${name}.` };
       }
     }
-    const asset = release.assets.find(item => item.name === 'databrain.buildinfo.txt');
+    const buildInfoAsset = packageKind === 'codex' ? `${codexStem}.buildinfo.txt` : 'databrain.buildinfo.txt';
+    const asset = release.assets.find(item => item.name === buildInfoAsset);
     const assetUrl = new URL(asset.browser_download_url);
     let recordResponse = await fetchImpl(assetUrl.href, { signal: controller.signal, redirect: 'manual' });
     if ([301, 302, 303, 307, 308].includes(recordResponse.status)) {
@@ -99,8 +108,9 @@ export async function checkGitHubRelease({ manifest, build, fetchImpl = fetch, t
     const recordText = await readBoundedText(recordResponse, 4096);
     const published = parseBuildInfo(recordText);
     const fields = ['engine_repository', 'engine_revision', 'source_tree', 'source_sha256'];
+    if (packageKind === 'codex') fields.push('package_kind', 'package_version', 'architecture', 'runtime_version');
     const mismatch = fields.find(field => published[field] !== build[field]);
-    if (published.engine_repository !== REPOSITORY) {
+    if (published.engine_repository !== REPOSITORY || (packageKind === 'codex' && published.package_kind !== 'codex')) {
       return { state: 'FAIL', detail: 'GitHub release record names an unexpected source repository.' };
     }
     if (mismatch) return { state: 'FAIL', detail: `Installed ${mismatch} does not match GitHub release ${expectedTag}.` };
@@ -143,7 +153,8 @@ export async function checkGitHubRelease({ manifest, build, fetchImpl = fetch, t
     if (tagged?.type !== 'commit' || tagged.sha !== build.engine_revision) {
       return { state: 'FAIL', detail: `GitHub release tag ${expectedTag} does not resolve to the installed source revision.` };
     }
-    return { state: 'PASS', detail: `Installed version ${manifest.version}, engine revision ${build.engine_revision.slice(0, 12)}, and packaged payload digest match the release record; required MCPB/checksum assets are present, the source revision exists, and the release tag resolves to it.` };
+    const artifactLabel = packageKind === 'codex' ? `Codex ${packageInfo.architecture} ZIP/checksum` : 'MCPB/checksum';
+    return { state: 'PASS', detail: `Installed ${packageKind} version ${version}, engine revision ${build.engine_revision.slice(0, 12)}, and packaged payload digest match the release record; required ${artifactLabel} assets are present, the source revision exists, and the release tag resolves to it.` };
   } catch (error) {
     if (error?.name === 'PayloadTooLargeError') return { state: 'FAIL', detail: error.message };
     const detail = error?.name === 'AbortError' ? 'GitHub release check timed out.' : 'GitHub release check could not reach or read the public release record.';

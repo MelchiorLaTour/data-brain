@@ -13,16 +13,19 @@ import { fileURLToPath } from 'node:url';
 
 const [engine] = process.argv.slice(2);
 assert(engine, 'usage: test_mcp_recall_exam.mjs ENGINE');
+const launcher = process.env.DATABRAIN_TEST_LAUNCHER;
 const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-recall-exam-')));
 const corpus = path.join(temp, 'selected-notes');
 const moc = path.join(temp, 'moc');
 const rootsFile = path.join(temp, 'roots.txt');
+const selectionFile = path.join(temp, 'mcp-selection.json');
 await fs.mkdir(corpus);
 await fs.mkdir(moc);
 await fs.writeFile(rootsFile, `${await fs.realpath(corpus)}\n`);
 const env = { ...process.env, NB_CANON_ROOTS_FILE: rootsFile, NB_MOC_DIR: moc, PATH: '/usr/bin:/bin:/usr/sbin:/sbin' };
 const rows = [];
 let server;
+let stopCodexSetup = async () => true;
 const rowSequence = new Map();
 const variantFixture = new Map();
 const fixturePath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'recall-query-variants.tsv');
@@ -267,9 +270,11 @@ try {
   const desktop = path.join(serverHome, 'Desktop');
   const dataHome = path.join(desktop, 'DataBrain');
   await fs.mkdir(desktop, { recursive: true });
-  server = spawn(process.execPath, [path.join(engine, 'setup/mcp/server.mjs')], {
+  server = spawn(launcher || process.execPath,
+    launcher ? [] : [path.join(engine, 'setup/mcp/server.mjs')], {
     env: { ...process.env, HOME: serverHome, DATABRAIN_ENGINE_DIR: engine,
       DATABRAIN_TEST_HOME: dataHome, DATABRAIN_TEST_PARENT: desktop,
+      DATABRAIN_TEST_SELECTION_FILE: selectionFile,
       DATABRAIN_TEST_SOURCE_ROOTS: JSON.stringify([await fs.realpath(corpus)]),
       PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -305,11 +310,28 @@ try {
     assert(!result?.isError && !text.startsWith('DataBrain: '), `${name} failed: ${text}`);
     return text;
   }
+  stopCodexSetup = async () => {
+    if (!launcher) return true;
+    const status = await call('databrain_setup_status');
+    const active = status.match(/Background job ([0-9a-f-]+): (starting|running|cancelling)\b/);
+    if (!active) return true;
+    const cancellation = await call('databrain_cancel_job', { job_id: active[1] });
+    if (!/Cancellation requested|Cancelled DataBrain setup job/.test(cancellation)) return false;
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      const updated = await call('databrain_setup_status');
+      if (!new RegExp(`Background job ${active[1]}: (?:starting|running|cancelling)\\b`).test(updated)) return true;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    return false;
+  };
   async function waitForStatus(predicate, description) {
     let last = '';
-    for (let i = 0; i < 600; i += 1) {
+    for (let i = 0; i < (launcher ? 7200 : 600); i += 1) {
       last = await call('databrain_setup_status');
       if (predicate(last)) return last;
+      if (/Background job [0-9a-f-]+: failed\b/.test(last)) {
+        throw new Error(`Indexing failed while waiting for ${description}; last status: ${last}`);
+      }
       await new Promise(resolve => setTimeout(resolve, 250));
     }
     throw new Error(`Timed out waiting for ${description}; last status: ${last}`);
@@ -323,14 +345,28 @@ try {
     clientInfo: { name: 'synthetic-recall-exam', version: '1' },
   });
   server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
-  await call('databrain_setup_start');
-  await waitForStatus(status => status.includes('Stage: sources selected.'), 'disposable source authorization');
-  // Reuse the one built disposable engine index. MCP creates its own temporary
-  // authorization state above; this avoids indexing the same 200 synthetic files twice.
   const mcpMoc = path.join(dataHome, 'moc');
-  await fs.mkdir(mcpMoc, { recursive: true });
-  await fs.copyFile(path.join(moc, 'index.tsv'), path.join(mcpMoc, 'index.tsv'));
-  await fs.copyFile(path.join(moc, 'fts.db'), path.join(mcpMoc, 'fts.db'));
+  if (launcher) {
+    const sourceRoot = await fs.realpath(corpus);
+    const fileCount = (await fs.readdir(sourceRoot)).length;
+    await fs.writeFile(selectionFile, JSON.stringify({
+      selections: { sources: [sourceRoot], 'destination-parent': [desktop] },
+      approved: true,
+    }));
+    await call('databrain_setup_start');
+    const setupStatus = await waitForStatus(status => status.includes('Stage: taxonomy pending.') &&
+      status.includes(`Indexed rows: ${fileCount}.`) && /initial setup permissions: complete/.test(status),
+    'Codex bundle initial index');
+    assert.match(setupStatus, new RegExp(`File inventory: ${fileCount} indexed, 0 eligible missing from index`), setupStatus);
+  } else {
+    await call('databrain_setup_start');
+    await waitForStatus(status => status.includes('Stage: sources selected.'), 'disposable source authorization');
+    // Reuse the one built disposable engine index. MCP creates its own temporary
+    // authorization state above; this avoids indexing the same synthetic notes twice.
+    await fs.mkdir(mcpMoc, { recursive: true });
+    await fs.copyFile(path.join(moc, 'index.tsv'), path.join(mcpMoc, 'index.tsv'));
+    await fs.copyFile(path.join(moc, 'fts.db'), path.join(mcpMoc, 'fts.db'));
+  }
 
   for (const row of answerRows) {
     const fixture = variantFixture.get(row.id);
@@ -391,9 +427,15 @@ try {
   }
   process.stdout.write('Score is top-3 lexical file retrieval through the MCP query-variant tool. Frozen variants contain only questions and paraphrases/translations; they contain no answer text or expected paths. This does not test Claude-generated variants, answer correctness, citations, or Claude\'s judgment of read evidence; synthetic success cannot replace the private held-out judge-model exam.\n');
 } finally {
+  let removeTemp = true;
   if (server) {
+    if (launcher) {
+      try { removeTemp = await stopCodexSetup(); }
+      catch { removeTemp = false; }
+    }
     server.kill('SIGTERM');
     if (server.exitCode === null) await new Promise(resolve => server.once('exit', resolve));
   }
-  await fs.rm(temp, { recursive: true, force: true });
+  if (removeTemp) await fs.rm(temp, { recursive: true, force: true });
+  else process.stderr.write(`BLOCKED: Codex indexing did not stop; preserving synthetic fixture at ${temp}.\n`);
 }

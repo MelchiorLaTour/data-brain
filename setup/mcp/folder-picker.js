@@ -6,8 +6,27 @@ ObjC.import('Foundation');
 
 function run(argv) {
   var mode = argv.length ? ObjC.unwrap(argv[0]) : 'sources';
-  if (mode !== 'sources' && mode !== 'destination-parent' && mode !== 'capture-destination') {
+  if (mode !== 'sources' && mode !== 'destination-parent' && mode !== 'existing-databrain' && mode !== 'capture-destination' && mode !== 'setup-consent') {
     throw new Error('Unsupported folder selection mode.');
+  }
+
+  if (mode === 'setup-consent') {
+    var details = argv.length > 1 ? JSON.parse(ObjC.unwrap(argv[1])) : {};
+    if (typeof details.destination !== 'string' || !Array.isArray(details.roots) || !details.roots.length) {
+      throw new Error('The setup approval details are incomplete.');
+    }
+    var approval = $.NSAlert.alloc.init;
+    approval.setMessageText($('Approve DataBrain setup access'));
+    approval.setInformativeText($(
+      'Approval: ' + (details.action || 'initial setup') + '\n\nDataBrain will read eligible files only inside these folders:\n' +
+      details.roots.join('\n') +
+      '\n\nIt will create and write generated index files only here:\n' + details.destination +
+      '\n\nSetup will run locally without changing originals or uploading the corpus. File and folder names and any excerpt deliberately returned for an answer may enter your ChatGPT conversation. Approve this exact scope?'
+    ));
+    approval.addButtonWithTitle($('Approve setup'));
+    approval.addButtonWithTitle($('Cancel'));
+    var consent = approval.runModal();
+    return JSON.stringify({ approved: consent === $.NSAlertFirstButtonReturn });
   }
 
   var panel = $.NSOpenPanel.openPanel;
@@ -17,7 +36,7 @@ function run(argv) {
   panel.setShowsHiddenFiles(false);
   panel.setAllowsMultipleSelection(mode === 'sources');
   panel.setCanCreateDirectories(false);
-  var startingFolder = mode === 'sources' || mode === 'capture-destination'
+  var startingFolder = mode === 'sources' || mode === 'capture-destination' || mode === 'destination-parent'
     ? $.NSFileManager.defaultManager.URLsForDirectory_inDomains(
         $.NSDesktopDirectory, $.NSUserDomainMask
       ).firstObject
@@ -32,6 +51,10 @@ function run(argv) {
     panel.setTitle($('Choose where to create DataBrain'));
     panel.setMessage($('Choose Desktop to create the default Desktop/DataBrain folder.'));
     panel.setPrompt($('Choose this location'));
+  } else if (mode === 'existing-databrain') {
+    panel.setTitle($('Choose an existing DataBrain folder'));
+    panel.setMessage($('Select the DataBrain folder itself. DataBrain will verify its saved source folders before asking you to reconnect.'));
+    panel.setPrompt($('Connect this brain'));
   } else {
     panel.setTitle($('Choose where to save this new DataBrain note'));
     panel.setMessage($('Choose one folder inside a source folder you already approved. DataBrain will create a new file and will not replace an existing file.'));

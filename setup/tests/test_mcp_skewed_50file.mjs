@@ -10,6 +10,7 @@ import readline from 'node:readline';
 
 const [engine] = process.argv.slice(2);
 assert(engine, 'usage: test_mcp_skewed_50file.mjs PACKAGED_ENGINE_DIRECTORY');
+const launcher = process.env.DATABRAIN_TEST_LAUNCHER;
 const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-skewed-50-')));
 const home = path.join(temp, 'home');
 const desktop = path.join(home, 'Desktop');
@@ -54,7 +55,8 @@ for (const [category, count] of categories) {
 }
 assert.equal(expected.length, 50);
 
-const server = spawn(process.execPath, [path.join(engine, 'setup/mcp/server.mjs')], {
+const server = spawn(launcher || process.execPath,
+  launcher ? [] : [path.join(engine, 'setup/mcp/server.mjs')], {
   env: {
     ...process.env,
     HOME: home,
@@ -114,16 +116,25 @@ try {
   });
   server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
 
-  await fs.writeFile(selectionFile, `${desktop}\n`);
-  await call('databrain_setup_start');
-  await waitForStatus(status => status.includes('Stage: destination ready.'), 'disposable destination approval');
-  await fs.writeFile(selectionFile, `${canonicalCorpus}\n`);
-  await call('databrain_select_sources');
-  await waitForStatus(status => status.includes('Stage: sources selected.'), 'disposable source selection');
-  await call('databrain_setup_run');
+  if (launcher) {
+    await fs.writeFile(selectionFile, JSON.stringify({
+      selections: { sources: [canonicalCorpus], 'destination-parent': [desktop] },
+      approved: true,
+    }));
+    await call('databrain_setup_start');
+  } else {
+    await fs.writeFile(selectionFile, `${desktop}\n`);
+    await call('databrain_setup_start');
+    await waitForStatus(status => status.includes('Stage: destination ready.'), 'disposable destination approval');
+    await fs.writeFile(selectionFile, `${canonicalCorpus}\n`);
+    await call('databrain_select_sources');
+    await waitForStatus(status => status.includes('Stage: sources selected.'), 'disposable source selection');
+    await call('databrain_setup_run');
+  }
   const indexedStatus = await waitForStatus(status =>
-    status.includes('Stage: taxonomy pending.') && /initial indexing: complete/.test(status),
-  'all 50 files indexed');
+    status.includes('Stage: taxonomy pending.') && status.includes('Indexed rows: 50.') &&
+      (launcher ? /initial setup permissions: complete/.test(status) : /initial indexing: complete/.test(status)),
+    'all 50 files indexed');
   assert.match(indexedStatus, /Indexed rows: 50\./, indexedStatus);
   assert.match(indexedStatus, /File inventory: 50 indexed, 0 eligible missing from index, 0 unsupported; unreadable 0, cloud placeholders 0, empty 0, traversal errors 0\./, indexedStatus);
 
@@ -194,17 +205,25 @@ try {
   assert.match(postHealth, /Ranked search database: 50 rows; quick_check ok\./, postHealth);
   const installAudit = await call('databrain_verify_install');
   assert.match(installAudit, /Installed DataBrain audit: PARTIAL — inspect failed or blocked checks below\./, installAudit);
-  assert.match(installAudit, /(PASS|PARTIAL): Package identity — DataBrain 0\.1\.0; packaged files match their embedded digest/);
+  assert.match(installAudit, launcher
+    ? /PARTIAL: Package identity — DataBrain Codex 0\.1\.0 \(darwin-(?:arm64|x64)\); .*app payload and source digest match/
+    : /(PASS|PARTIAL): Package identity — DataBrain 0\.1\.0; packaged files match their embedded digest/);
   assert.match(installAudit, /https:\/\/github\.com\/MelchiorLaTour\/data-brain\.git @ [0-9a-f]{12}/);
   assert.match(installAudit, /PASS: Selected-source health/);
   assert.match(installAudit, /(PASS|FAIL|BLOCKED): GitHub release match/);
   assert.match(installAudit, /PASS: Setup contract/);
   assert.match(installAudit, /PASS: Known-hit search\/read/);
   assert.match(installAudit, /PASS: Absent-query probe/);
-  assert.match(installAudit, /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; bundle root ".+"; loaded version 0\.1\.0; engine revision [0-9a-f]{12}\./);
-  assert.match(installAudit, /BLOCKED: Original MCPB archive provenance — Claude Desktop exposes the unpacked extension/);
+  assert.match(installAudit, launcher
+    ? /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; package root ".+"; loaded version 0\.1\.0; engine revision [0-9a-f]{12}\./
+    : /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; bundle root ".+"; loaded version 0\.1\.0; engine revision [0-9a-f]{12}\./);
+  assert.match(installAudit, launcher
+    ? /BLOCKED: Original ZIP archive provenance — The active MCP process/
+    : /BLOCKED: Original MCPB archive provenance — Claude Desktop exposes the unpacked extension/);
   assert.match(installAudit, /BLOCKED: Desktop install record and restart/);
-  assert.match(installAudit, /audits that running bundle against the GitHub release build record for its exact manifest version, including prereleases/);
+  assert.match(installAudit, launcher
+    ? /audits the running package against the GitHub release build record for its exact manifest version, including prereleases/
+    : /audits the running bundle against the GitHub release build record for its exact manifest version, including prereleases/);
   assert.match(installAudit, /offline or when the matching versioned release is unavailable/);
   assert(!installAudit.includes('BODY_SENTINEL_'), 'install audit must not return source excerpts');
   process.stdout.write([

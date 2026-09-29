@@ -88,4 +88,43 @@ const allowedRedirect = await checkGitHubRelease({
   },
 });
 assert.equal(allowedRedirect.state, 'PASS');
+const codexPackage = { kind: 'codex', version: '0.1.0', architecture: 'darwin-arm64' };
+const codexBuild = {
+  engine_repository: build.engine_repository,
+  engine_revision: build.engine_revision,
+  source_tree: 'clean',
+  source_sha256: build.source_sha256,
+  package_kind: 'codex',
+  package_version: '0.1.0',
+  architecture: 'darwin-arm64',
+  runtime_version: '24.21.0',
+};
+const codexStem = 'databrain-codex-0.1.0-darwin-arm64';
+const codexAssetUrl = name => `https://github.com/MelchiorLaTour/data-brain/releases/download/v0.1.0/${name}`;
+const codexAssets = [`${codexStem}.zip`, `${codexStem}.zip.sha256`, `${codexStem}.buildinfo.txt`]
+  .map(name => ({ name, browser_download_url: codexAssetUrl(name) }));
+const codexInfo = Object.entries(codexBuild).map(([key, value]) => `${key}=${value}`).join('\n');
+const codexFetch = async url => {
+  if (url.endsWith('/releases/tags/v0.1.0')) return new Response(JSON.stringify({ tag_name: 'v0.1.0', draft: false, assets: codexAssets }));
+  if (url.endsWith(`/commits/${build.engine_revision}`)) return new Response(JSON.stringify({ sha: build.engine_revision }));
+  if (url.endsWith('/git/ref/tags/v0.1.0')) return new Response(JSON.stringify({ object: { sha: build.engine_revision, type: 'commit' } }));
+  if (url === codexAssetUrl(`${codexStem}.buildinfo.txt`)) return new Response(codexInfo);
+  throw new Error(`Unexpected Codex release URL: ${url}`);
+};
+const codexRelease = await checkGitHubRelease({ packageInfo: codexPackage, build: codexBuild, fetchImpl: codexFetch });
+assert.equal(codexRelease.state, 'PASS');
+const codexMissingX64 = await checkGitHubRelease({
+  packageInfo: codexPackage,
+  build: codexBuild,
+  fetchImpl: async url => url.endsWith('/releases/tags/v0.1.0')
+    ? new Response(JSON.stringify({ tag_name: 'v0.1.0', draft: false, assets: codexAssets.filter(asset => !asset.name.endsWith('.zip')) }))
+    : codexFetch(url),
+});
+assert.equal(codexMissingX64.state, 'BLOCKED');
+const codexArchitectureMismatch = await checkGitHubRelease({
+  packageInfo: { ...codexPackage, architecture: 'darwin-x64' },
+  build: codexBuild,
+  fetchImpl: codexFetch,
+});
+assert.equal(codexArchitectureMismatch.state, 'BLOCKED');
 process.stdout.write('PASS: GitHub release audit checks the installed version tag including prereleases, required assets, a reachable source commit, and lightweight or bounded nested annotated tag identity; rejects drafts and invalid versions, rejects cyclic tags, bounds responses, accepts exact metadata and approved redirects, detects mismatches, blocks a missing release, and rejects unexpected hosts and redirects.\n');

@@ -10,6 +10,7 @@ import readline from 'node:readline';
 
 const [engine] = process.argv.slice(2);
 assert(engine, 'usage: test_mcp_multivariant_workflow.mjs PACKAGED_ENGINE_DIRECTORY');
+const launcher = process.env.DATABRAIN_TEST_LAUNCHER;
 const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-multivariant-')));
 const home = path.join(temp, 'home');
 const desktop = path.join(home, 'Desktop');
@@ -38,7 +39,8 @@ await fs.writeFile(decoy, [
   '',
 ].join('\n'));
 
-const server = spawn(process.execPath, [path.join(engine, 'setup/mcp/server.mjs')], {
+const server = spawn(launcher || process.execPath,
+  launcher ? [] : [path.join(engine, 'setup/mcp/server.mjs')], {
   env: {
     ...process.env,
     HOME: home,
@@ -100,14 +102,24 @@ try {
     clientInfo: { name: 'synthetic-multivariant-workflow', version: '1' },
   });
   server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
-  await fs.writeFile(selectionFile, `${desktop}\n`);
-  await call('databrain_setup_start');
-  await waitForStatus(status => status.includes('Stage: destination ready.'), 'isolated destination setup');
-  await fs.writeFile(selectionFile, `${await fs.realpath(corpus)}\n`);
-  await call('databrain_select_sources');
-  await waitForStatus(status => status.includes('Stage: sources selected.'), 'synthetic source approval');
-  await call('databrain_setup_run');
-  await waitForStatus(status => status.includes('Stage: taxonomy pending.') && /initial indexing: complete/.test(status), 'two-file index');
+  if (launcher) {
+    await fs.writeFile(selectionFile, JSON.stringify({
+      selections: { sources: [await fs.realpath(corpus)], 'destination-parent': [desktop] },
+      approved: true,
+    }));
+    await call('databrain_setup_start');
+    await waitForStatus(status => status.includes('Stage: taxonomy pending.') &&
+      status.includes('Indexed rows: 2.') && /initial setup permissions: complete/.test(status), 'two-file index');
+  } else {
+    await fs.writeFile(selectionFile, `${desktop}\n`);
+    await call('databrain_setup_start');
+    await waitForStatus(status => status.includes('Stage: destination ready.'), 'isolated destination setup');
+    await fs.writeFile(selectionFile, `${await fs.realpath(corpus)}\n`);
+    await call('databrain_select_sources');
+    await waitForStatus(status => status.includes('Stage: sources selected.'), 'synthetic source approval');
+    await call('databrain_setup_run');
+    await waitForStatus(status => status.includes('Stage: taxonomy pending.') && /initial indexing: complete/.test(status), 'two-file index');
+  }
 
   // Variant one is deliberately unrelated lexical wording. Variant two is a
   // query reformulation with shared concepts; the oracle requires that it
