@@ -195,7 +195,7 @@ async function launchCase(name, approved, preseedIncomplete = false, resumeInter
     }
     await assert.rejects(lstat(path.join(destination, '.databrain-codex-setup-pending')),
       { code: 'ENOENT' }, 'successful recovery clears the temporary setup marker');
-    assert.match(taxonomyStatus, /apply clear folder mappings under the initial approval/);
+    assert.match(taxonomyStatus, /give each folder group a broad useful lowercase label under the initial approval/);
     assert.doesNotMatch(taxonomyStatus, /wait for the user to confirm/i);
     const state = JSON.parse(await readFile(path.join(destination, '.databrain', 'desktop-state.json'), 'utf8'));
     assert.equal(state.client, 'codex');

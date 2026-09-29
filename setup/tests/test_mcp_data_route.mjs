@@ -199,7 +199,7 @@ try {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     assert(cleanStatus.includes('refresh: complete'), `clean fixture refresh did not finish: ${cleanStatus}`);
-    assert(cleanStatus.includes('apply clear folder mappings under the initial approval'), `clean indexing did not show the real category-review next step: ${cleanStatus}`);
+    assert(cleanStatus.includes('give each folder group a broad useful lowercase label under the initial approval'), `clean indexing did not show the real category-review next step: ${cleanStatus}`);
   } finally {
     await fs.chmod(unreadableFixture, 0o000);
   }
