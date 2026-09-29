@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export function markdownLinkTargets(line, sourcePath) {
+export function markdownLinkTargets(line, sourcePath, wikiNames) {
   const targets = [];
   for (const match of line.matchAll(/\[[^\]]*\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\s*\)/g)) {
     let target = (match[1] || match[2] || '').replace(/\\([()\\])/g, '$1');
@@ -14,7 +14,21 @@ export function markdownLinkTargets(line, sourcePath) {
     try { target = decodeURIComponent(target); } catch { continue; }
     if (target) targets.push(path.resolve(path.dirname(sourcePath), target));
   }
+  if (wikiNames) for (const match of line.matchAll(/!?\[\[([^\]|#]+)[^\]]*\]\]/g)) {
+    const file = wikiNames.get(path.basename(match[1].trim()).toLocaleLowerCase());
+    if (file) targets.push(file);
+  }
   return targets;
+}
+
+// Obsidian resolves [[Name]] by file name anywhere in the vault; ambiguous names are skipped.
+export function wikiNameIndex(files) {
+  const names = new Map();
+  for (const file of files) {
+    const base = path.basename(file).toLocaleLowerCase();
+    for (const key of new Set([base, base.replace(/\.(?:md|markdown)$/, '')])) names.set(key, names.has(key) ? null : file);
+  }
+  return names;
 }
 
 export function finalizeRelationshipRecords(records) {
@@ -69,6 +83,11 @@ async function buildFromEnvironment() {
   if (!indexInfo.isFile() || indexInfo.isSymbolicLink()) throw new Error('The generated index is not a regular local file.');
   const index = await fs.readFile(indexPath, 'utf8');
   const records = [];
+  const wikiNames = wikiNameIndex(index.split('\n').filter(line => line && !line.startsWith('#')).map(line => {
+    let file = line.split('\t')[0];
+    try { file = decodeURIComponent(file.replace(/\+/g, ' ')); } catch { return ''; }
+    return file.startsWith('~/') ? path.join(os.homedir(), file.slice(2)) : file;
+  }));
   for (const line of index.split('\n')) {
     if (!line || line.startsWith('#')) continue;
     const [storedPath, title = '', room = '-', keywords = '-'] = line.split('\t');
@@ -95,7 +114,7 @@ async function buildFromEnvironment() {
         await assertRootIdentity(root);
         record.digest = createHash('sha256').update(bytes).digest('hex');
         if (/\.(?:md|markdown)$/i.test(file)) {
-          for (const text of bytes.toString('utf8').split('\n')) for (const target of markdownLinkTargets(text, file)) {
+          for (const text of bytes.toString('utf8').split('\n')) for (const target of markdownLinkTargets(text, file, wikiNames)) {
             if (!roots.some(approved => target.startsWith(`${approved}/`))) continue;
             try {
               await assertRootIdentity(roots.find(approved => target.startsWith(`${approved}/`)));

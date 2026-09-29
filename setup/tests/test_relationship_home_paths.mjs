@@ -37,5 +37,9 @@ assert(report.includes(encodeURIComponent(first)), 'tilde-indexed home path was 
 assert(report.includes(encodeURIComponent(second)), 'second tilde-indexed home path was absent from terminal relationship report');
 const after = await Promise.all([first, second].map(async file => (await fs.readFile(file)).toString()));
 assert.deepEqual(after, before, 'relationship indexing changed source documents');
+const { markdownLinkTargets, wikiNameIndex } = await import('../mcp/relationship-core.mjs');
+const names = wikiNameIndex(['/v/a/Note One.md', '/v/b/other.md', '/v/c/other.md', '/v/d/scan.pdf']);
+assert.deepEqual(markdownLinkTargets('see [[Note One|alias]], [[other]], ![[scan.pdf]] and [[missing]]', '/v/x.md', names),
+  ['/v/a/Note One.md', '/v/d/scan.pdf']);
 console.log('PASS: terminal relationship scan expands normal ~/ index paths, records links, and leaves originals unchanged.');
 await fs.rm(temp, { recursive: true, force: true });
