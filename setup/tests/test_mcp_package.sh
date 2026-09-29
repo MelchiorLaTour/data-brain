@@ -63,7 +63,7 @@ assert config['args'] == [
     '--databrain-source-roots', '${user_config.source_roots}',
 ], 'MCPB must pass its settings-selected parent and all source roots as argv values'
 assert manifest['user_config']['data_parent']['type'] == 'directory'
-assert manifest['user_config']['data_parent']['default'] == '${DESKTOP}'
+assert 'default' not in manifest['user_config']['data_parent']
 assert manifest['user_config']['source_roots']['type'] == 'directory'
 assert manifest['user_config']['source_roots']['multiple'] is True
 PY

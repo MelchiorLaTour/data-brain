@@ -27,7 +27,6 @@
       "type": "directory",
       "title": "DataBrain folder location",
       "description": "Choose where DataBrain may create its own DataBrain folder after you start setup in chat.",
-      "default": "${DESKTOP}",
       "required": true
     },
     "source_roots": {

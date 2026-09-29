@@ -199,7 +199,7 @@ try {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     assert(cleanStatus.includes('refresh: complete'), `clean fixture refresh did not finish: ${cleanStatus}`);
-    assert(cleanStatus.includes('review the proposed categories with databrain_taxonomy_candidates'), `clean indexing did not show the real category-review next step: ${cleanStatus}`);
+    assert(cleanStatus.includes('apply clear folder mappings under the initial approval'), `clean indexing did not show the real category-review next step: ${cleanStatus}`);
   } finally {
     await fs.chmod(unreadableFixture, 0o000);
   }

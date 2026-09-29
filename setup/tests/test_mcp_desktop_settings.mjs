@@ -261,7 +261,7 @@ try {
   const args = manifest.server.mcp_config.args;
   assert.deepEqual(args.slice(1), ['--databrain-parent', '${user_config.data_parent}', '--databrain-source-roots', '${user_config.source_roots}']);
   assert.equal(manifest.user_config.data_parent.type, 'directory');
-  assert.equal(manifest.user_config.data_parent.default, '${DESKTOP}');
+  assert.equal(manifest.user_config.data_parent.default, undefined);
   assert.equal(manifest.user_config.source_roots.type, 'directory');
   assert.equal(manifest.user_config.source_roots.multiple, true);
   console.log('PASS: MCPB Desktop settings map to argv; setup consent gates creation/reads; repeated setup preserves state, grants, and sources; multiple roots persist; add preserves grants; audit reports drift without mutation; changed folder identity requires re-selection; removed settings roots are revoked before search/read.');
