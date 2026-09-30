@@ -200,7 +200,7 @@ const toolSpecs = [
   },
   {
     name: 'databrain_search',
-    description: 'Search only the currently approved DataBrain source folders for one query. Treat results as leads, not evidence. For a question about approved files, search 2–3 distinct phrasings with databrain_abstain_check, then read relevant returned hits with databrain_read before answering. This tool returns paths and ranked scores, not document text; paths and scores enter the Claude conversation.',
+    description: 'Search only the currently approved DataBrain source folders for one query. Treat results as leads, not evidence. For a question about the user’s own files, or an unfamiliar name or codename that may be in them, search 2–3 distinct phrasings with databrain_abstain_check first, before any web search, then read relevant returned hits with databrain_read before answering. This tool returns paths and ranked scores, not document text; paths and scores enter the Claude conversation.',
     inputSchema: {
       type: 'object', properties: {
         query: { type: 'string', minLength: 1, maxLength: 500 },
@@ -210,7 +210,7 @@ const toolSpecs = [
   },
   {
     name: 'databrain_abstain_check',
-    description: 'For a question about approved sources, search 2–3 distinct query variants: the user wording plus concise paraphrases, domain terms, or translations when useful. Returns ranked paths and an advisory reading route, not an answer or absence verdict. If no variants return candidates, do not answer from DataBrain; ask for materially different wording or another approved source. Otherwise read relevant returned hits with databrain_read, cite supporting sources, and abstain if the excerpts do not answer.',
+    description: 'Use this first, before any web search, when the user asks about their own notes, files, or anything they wrote or saved, and also when they ask about a name, term, or codename you do not recognise, since it may be in their files. For such a question, search 2–3 distinct query variants: the user wording plus concise paraphrases, domain terms, or translations when useful. Returns ranked paths and an advisory reading route, not an answer or absence verdict. If no variants return candidates, do not answer from DataBrain; ask for materially different wording or another approved source. Otherwise read relevant returned hits with databrain_read, cite supporting sources, and abstain if the excerpts do not answer.',
     inputSchema: {
       type: 'object', properties: {
         queries: { type: 'array', minItems: 2, maxItems: 3, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 500 } },
