@@ -52,17 +52,18 @@
     <p class="intro" style="margin-top:14px">Before the setup chat, open DataBrain in <strong>Settings → Extensions</strong>. Set <strong>DataBrain folder location</strong> to Desktop; after you approve setup, DataBrain creates its own folder there. Under <strong>Folders DataBrain may use</strong>, select only document folders you want searched, such as Documents/Work. Do not select Desktop itself or a folder containing DataBrain.</p>
     <p class="privacy"><strong>If DataBrain already exists there:</strong> it will be left untouched. Choose a different parent in extension settings where a new DataBrain folder can be created.</p>
     <div class="say"><strong>Then start a new chat</strong> <q>Set up my DataBrain.</q></div>
-    <p class="intro">DataBrain builds a local search index. You choose the folders, review suggested categories, and ask Claude questions about those files. Claude reports files it cannot read; unsupported files are left out of search.</p>
+    <p class="intro">DataBrain builds a local search index. You choose the folders, Claude adds categories, and you ask Claude questions about those files. Claude reports files it cannot read; unsupported files are left out of search.</p>
     <div class="release-warning"><strong>UNVERIFIED PRE-RELEASE.</strong> Synthetic package tests pass, but this release has not been installed or tested in Claude Desktop. Installation, restart, and setup in a new chat remain unverified.</div>
     <section class="grid" aria-label="Setup and privacy">
       <article class="card">
         <h2>Choose what DataBrain can use</h2>
         <ul>
           <li>Your folder selections grant access; Claude starts reading files only after you confirm setup in chat.</li>
-          <li>Review Claude’s suggested categories before they are applied.</li>
+          <li>Claude adds a broad category to each folder without asking.</li>
           <li>After changing source selections, restart Claude. Ask Claude to add the selected folders to keep existing access, or replace the selection to remove access to omitted folders.</li>
           <li>Ask Claude to audit the install. It checks the running package and saved folder setup. It checks the GitHub release that matches its exact version. It cannot verify the original download file, inspect Desktop’s hidden install record, or prove a restart/fresh chat; GitHub checks may be blocked offline.</li>
           <li>Ask before saving a capture, note, or synthesis.</li>
+          <li>Start your question with <q>In DataBrain,</q> or say “my notes”, or Claude may use the web or its own Memory instead. Optional, to skip that cue: add to Claude’s preferences <q>When I ask about my own notes, files, or an unfamiliar name I may have written, check my DataBrain before searching the web.</q></li>
         </ul>
       </article>
       <article class="card">
