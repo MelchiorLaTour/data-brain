@@ -56,6 +56,50 @@ export function applyConfirmedTaxonomy(indexText, roots, assignments) {
   return { output, changed };
 }
 
+/**
+ * Silent-refresh labels: give each unlabeled row the most common label set already used in its
+ * top-level folder group (the same grouping as the candidates), or "unclassified" when the group
+ * has no labels yet. Deterministic, so a background refresh never leaves unlabeled rows.
+ */
+export function inheritTaxonomy(indexText, roots) {
+  const groupOf = file => {
+    const root = roots.find(candidate => isInside(file, candidate));
+    if (!root) return null;
+    const first = path.relative(root, path.dirname(file)).split(path.sep).filter(Boolean)[0];
+    return first ? path.join(root, first) : root;
+  };
+  const lines = indexText.split('\n');
+  const parsed = lines.map(line => {
+    if (!line || line.startsWith('#')) return null;
+    const columns = line.split('\t');
+    if (columns.length < 4) return null;
+    let file;
+    try { file = path.resolve(decodeStoredPath(columns[0])); } catch { return null; }
+    const group = groupOf(file);
+    if (!group) return null;
+    return { columns, group, labeled: Boolean(columns[2]) && columns[2] !== '-' };
+  });
+  const tally = new Map();
+  for (const row of parsed) {
+    if (!row?.labeled) continue;
+    const counts = tally.get(row.group) || new Map();
+    counts.set(row.columns[2], (counts.get(row.columns[2]) || 0) + 1);
+    tally.set(row.group, counts);
+  }
+  let changed = 0;
+  const output = lines.map((line, index) => {
+    const row = parsed[index];
+    if (!row || row.labeled) return line;
+    const counts = tally.get(row.group);
+    row.columns[2] = counts
+      ? [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0]
+      : 'unclassified';
+    changed += 1;
+    return row.columns.join('\t');
+  }).join('\n');
+  return { output, changed };
+}
+
 export function proposeTaxonomyCandidates(indexText, roots) {
   const groups = new Map();
   for (const line of indexText.split('\n')) {

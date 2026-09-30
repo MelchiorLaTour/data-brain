@@ -32,6 +32,7 @@ ENGINE_BIN_FILES=(
   rebuild.sh
   refresh.sh
   taxonomy.sh
+  prune-missing.sh
 )
 for file in "${ENGINE_BIN_FILES[@]}"; do
   [ -f "$ROOT/bin/$file" ] || { echo "build: missing required engine script bin/$file" >&2; exit 2; }

@@ -164,3 +164,22 @@ export async function checkFreshness({ roots, indexText, inventoryText, livePath
   }
   return { stale: Boolean(added.length || deleted.length || changed.length || untracked.length), added, deleted, changed: changed.sort(), untracked: untracked.sort() };
 }
+
+/**
+ * A file edited while a refresh was running may have been indexed before the edit, and a baseline
+ * captured at the end records its post-edit state. Mark files modified inside [startedAt, finishedAt]
+ * (ms since epoch) as "missing", so the next check reports them as changed and refreshes again.
+ */
+export async function flagChangedDuring({ baselineText, startedAt, finishedAt }) {
+  let flagged = 0;
+  const lines = await Promise.all(baselineText.split('\n').map(async line => {
+    if (!line || line.startsWith('#')) return line;
+    const encoded = line.split('\t', 1)[0];
+    try {
+      const info = await fs.lstat(decodePath(encoded));
+      if (info.mtimeMs > startedAt && info.mtimeMs <= finishedAt) { flagged += 1; return `${encoded}\tmissing`; }
+    } catch {}
+    return line;
+  }));
+  return { text: lines.join('\n'), flagged };
+}

@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const engine = path.resolve(process.argv[2] || path.resolve(here, '../..'));
-const { applyConfirmedTaxonomy, proposeTaxonomyCandidates } = await import(pathToFileURL(path.join(engine, 'setup/mcp/taxonomy-core.mjs')));
+const { applyConfirmedTaxonomy, inheritTaxonomy, proposeTaxonomyCandidates } = await import(pathToFileURL(path.join(engine, 'setup/mcp/taxonomy-core.mjs')));
 const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-taxonomy-')));
 try {
   const source = path.join(temp, 'approved source');
@@ -91,6 +91,22 @@ try {
   assert.throws(() => applyConfirmedTaxonomy(index, roots, [{ folder: path.join(temp, 'unapproved'), categories: ['valid'] }]), /outside the selected source folders/);
   assert.throws(() => applyConfirmedTaxonomy(index, roots, [{ folder: path.join(source, 'Projects'), categories: ['Not valid'] }]), /lowercase names/);
   assert.throws(() => applyConfirmedTaxonomy(index, roots, [{ folder: path.join(source, 'Projects'), categories: [] }]), /1–5 categories/);
+  const inheritIndex = [
+    '# path\ttitle\tcategory\tkeywords',
+    `${path.join(source, 'Projects', 'a.md')}\tA\tproject,work\tk`,
+    `${path.join(source, 'Projects', 'b.md')}\tB\tproject,work\tk`,
+    `${path.join(source, 'Projects', 'c.md')}\tC\tother\tk`,
+    `${path.join(source, 'Projects', 'new.md')}\tNew\t-\tk`,
+    `${path.join(source, 'Fresh', 'new.md')}\tFresh new\t-\tk`,
+    `${path.join(outside, 'escape.md')}\tOutside\t-\tk`,
+    '',
+  ].join('\n');
+  const inherited = inheritTaxonomy(inheritIndex, [source]);
+  assert.equal(inherited.changed, 2, 'only unlabeled rows inside the selected roots may change');
+  assert.match(inherited.output, new RegExp(`Projects/new.md\\tNew\\tproject,work`), 'a new file inherits its folder group most common label set');
+  assert.match(inherited.output, new RegExp(`Fresh/new.md\\tFresh new\\tunclassified`), 'a folder group with no labels gets unclassified');
+  assert.match(inherited.output, new RegExp(`escape.md\\tOutside\\t-`), 'a row outside the grant is untouched');
+  assert.match(inherited.output, /a\.md\tA\tproject,work/, 'existing labels are preserved');
   const manyRoot = path.join(temp, 'many');
   const manyFiles = Array.from({ length: 60 }, (_, i) => path.join(manyRoot, `folder-${i}`, 'note.md'));
   const manyIndex = ['# path\ttitle\tcategory\tkeywords', ...manyFiles.map((file, i) => `${file}\tNote ${i}\t-\tk${i}`), ''].join('\n');

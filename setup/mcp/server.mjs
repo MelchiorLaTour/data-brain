@@ -7,8 +7,8 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { finalizeRelationshipRecords, markdownLinkTargets, wikiNameIndex } from './relationship-core.mjs';
-import { applyConfirmedTaxonomy, proposeTaxonomyCandidates } from './taxonomy-core.mjs';
-import { captureFreshnessBaseline, checkFreshness, scanSelectedFiles } from './freshness-core.mjs';
+import { applyConfirmedTaxonomy, inheritTaxonomy, proposeTaxonomyCandidates } from './taxonomy-core.mjs';
+import { captureFreshnessBaseline, checkFreshness, flagChangedDuring, scanSelectedFiles } from './freshness-core.mjs';
 import { checkGitHubRelease } from './github-release-check.mjs';
 import { CODEX_SETUP_MARKER, inspectCodexSetupRecovery, readCodexLocator, removeCodexSetupMarker, writeCodexLocator, writeCodexSetupMarker } from './codex-state.mjs';
 import { readCodexPackageIdentity } from './package-identity.mjs';
@@ -2408,6 +2408,102 @@ async function performIndexingContents(roots, refresh, current, commitState) {
   };
 }
 
+// Check on use (plan 11): a search compares the approved folders with the last index, never waits on
+// the result, and starts a background refresh when files changed. Claude mode only; a finished setup
+// keeps its stage, and the relationship report is left as it was at setup.
+const FRESHNESS_CHECK_INTERVAL_MS = Number(process.env.DATABRAIN_FRESHNESS_CHECK_MS) || 60000;
+const FRESHNESS_BUDGET_MS = 1500;
+const AUTO_REFRESH_RETRY_MS = 5 * 60000;
+let lastFreshnessCheckAt = 0;
+let lastAutoRefreshFailureAt = 0;
+
+async function freshnessNoteOnUse() {
+  if (codexMode || !mocDir || !freshnessPath) return '';
+  if ([...activeJobs.values()].some(job => job.kind === 'refresh' && job.status === 'running')) {
+    return '\n\nFreshness: a background refresh is running, so these results come from the previous index. Tell the user, and search again shortly.';
+  }
+  if (Date.now() - lastFreshnessCheckAt < FRESHNESS_CHECK_INTERVAL_MS) return '';
+  lastFreshnessCheckAt = Date.now();
+  let timer;
+  const budget = new Promise(resolve => { timer = setTimeout(() => resolve(''), FRESHNESS_BUDGET_MS); timer.unref?.(); });
+  try { return await Promise.race([checkFreshnessAndRefresh().catch(() => ''), budget]); }
+  finally { clearTimeout(timer); }
+}
+
+async function checkFreshnessAndRefresh() {
+  const state = await readState();
+  if (!['verification pending', 'ready'].includes(state.stage)) return '';
+  const roots = await validateStoredRoots(state);
+  const [baselineText, indexText, livePaths] = await Promise.all([
+    fs.readFile(freshnessPath, 'utf8'),
+    fs.readFile(path.join(mocDir, 'index.tsv'), 'utf8'),
+    scanSelectedFiles({ roots }),
+  ]);
+  const result = await checkFreshness({ roots, indexText, livePaths, baselineText });
+  if (!result.stale) return '';
+  const total = result.added.length + result.changed.length + result.deleted.length + result.untracked.length;
+  const parts = [[result.added.length, 'added'], [result.changed.length, 'changed'], [result.deleted.length, 'deleted'], [result.untracked.length, 'without baseline']]
+    .filter(([count]) => count).map(([count, label]) => `${count} ${label}`).join(', ');
+  const summary = `${total} file${total === 1 ? '' : 's'} changed since the last index (${parts})`;
+  if (Date.now() - lastAutoRefreshFailureAt < AUTO_REFRESH_RETRY_MS) {
+    return `\n\nFreshness: ${summary}. The last background refresh failed, so these results may be out of date. Tell the user.`;
+  }
+  if ([...activeJobs.values()].some(job => job.kind === 'refresh' && job.status === 'running')) {
+    return `\n\nFreshness: ${summary}; a background refresh is already running. Tell the user, and search again shortly.`;
+  }
+  startAutoRefresh(roots);
+  return `\n\nFreshness: ${summary}. Refreshing in the background; these results come from the previous index. Tell the user how many files changed, and search again shortly to include them (databrain_setup_status shows when the refresh finishes).`;
+}
+
+function startAutoRefresh(roots) {
+  return startJob('refresh', async current => {
+    const acquired = await acquireIndexWorkerLock(current);
+    if (!acquired) throw new Error('Another DataBrain client is already indexing this brain.');
+    try { return await performAutoRefresh(roots, current); }
+    catch (error) { lastAutoRefreshFailureAt = Date.now(); throw error; }
+    finally { await releaseIndexWorkerLock(current); }
+  });
+}
+
+// See flagChangedDuring: an edit made while the refresh ran is flagged so the next check refreshes again.
+async function flagFilesChangedDuringRefresh(startedAt) {
+  const finishedAt = Date.now();
+  let baselineText;
+  try { baselineText = await fs.readFile(freshnessPath, 'utf8'); } catch { return; }
+  const { text, flagged } = await flagChangedDuring({ baselineText, startedAt, finishedAt });
+  if (!flagged) return;
+  const temp = `${freshnessPath}.${randomUUID()}.tmp`;
+  await fs.writeFile(temp, text, { mode: 0o600, flag: 'wx' });
+  await fs.rename(temp, freshnessPath);
+}
+
+async function performAutoRefresh(roots, current) {
+  const startedAt = Date.now();
+  for (const root of roots) {
+    validateSelectedFolder(root);
+    if (realpathSync(root) !== root) throw new Error('A source folder changed identity. Select it again.');
+  }
+  await setIndexProgress(current, 'Refreshing changed files in approved folders.');
+  for (const root of roots) await runEngine('ingest-root.sh', [root], current);
+  await runEngine('prune-missing.sh', [], current);
+  assertSafeDataHome();
+  const indexPath = path.join(mocDir, 'index.tsv');
+  const inherited = inheritTaxonomy(await fs.readFile(indexPath, 'utf8'), roots);
+  if (inherited.changed) {
+    const temp = `${indexPath}.${randomUUID()}.tmp`;
+    await fs.writeFile(temp, inherited.output, { mode: 0o600, flag: 'wx' });
+    await fs.rename(temp, indexPath);
+  }
+  await setIndexProgress(current, 'Extracting changed documents and updating ranked search.');
+  await runEngine('extract.sh', [], current);
+  await runEngine('rebuild.sh', [], current);
+  await runEngine('build-fts.sh', [], current);
+  await runEngine('inventory.sh', [], current);
+  await saveFreshnessBaseline(roots);
+  await flagFilesChangedDuringRefresh(startedAt);
+  return 'Background refresh finished; the index is current.';
+}
+
 async function setIndexProgress(job, message) {
   if (job.cancelled) throw new Error('Indexing was cancelled. The saved checkpoint can be resumed.');
   if (job.persistState) return updateIndexWorkerProgress(job, message);
@@ -2894,9 +2990,13 @@ async function callTool(name, args) {
       case 'databrain_search': {
         if (typeof args.query !== 'string' || !args.query.trim() || args.query.length > 500) return fail('Provide a search of 1–500 characters.');
         const limit = Number.isInteger(args.limit) ? Math.max(1, Math.min(RESULT_CAP, args.limit)) : 5;
-        return resultText(await search(args.query, limit));
+        const [found, freshness] = await Promise.all([search(args.query, limit), freshnessNoteOnUse()]);
+        return resultText(`${found}${freshness}`);
       }
-      case 'databrain_abstain_check': return resultText(await abstainCheck(args.queries));
+      case 'databrain_abstain_check': {
+        const [checked, freshness] = await Promise.all([abstainCheck(args.queries), freshnessNoteOnUse()]);
+        return resultText(`${checked}${freshness}`);
+      }
       case 'databrain_read': {
         const readPath = typeof args.path === 'string' && args.path.startsWith('~/')
           ? path.join(os.homedir(), args.path.slice(2))

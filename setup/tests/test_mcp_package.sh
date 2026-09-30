@@ -36,6 +36,7 @@ expected_files = {
     'bin/build-fts.sh', 'bin/build-index.sh', 'bin/canon.sh', 'bin/extract.sh',
     'bin/fts.sh', 'bin/index-add.sh', 'bin/ingest-root.sh', 'bin/inventory.sh',
     'bin/look.sh', 'bin/rebuild.sh', 'bin/relationships.sh', 'bin/refresh.sh', 'bin/taxonomy.sh',
+    'bin/prune-missing.sh',
     'setup/mcp/folder-picker.js', 'setup/mcp/freshness-core.mjs',
     'setup/mcp/github-release-check.mjs', 'setup/mcp/codex-state.mjs', 'setup/mcp/pdf-extract.js',
     'setup/mcp/relationship-core.mjs', 'setup/mcp/server.mjs', 'setup/mcp/package-identity.mjs',
@@ -85,6 +86,8 @@ run_gate 'Terminal relationship home paths' node "$HERE/tests/test_relationship_
 run_gate 'Freshness core' node "$HERE/tests/test_mcp_freshness_core.mjs" "$STAGE"
 run_gate 'Terminal capture' bash "$HERE/tests/test_terminal_capture.sh"
 run_gate 'FTS source-swap race' bash "$HERE/tests/test_build_fts_races.sh"
+run_gate 'Incremental search index' bash "$HERE/tests/test_build_fts_incremental.sh" "$STAGE"
+run_gate 'Auto refresh on use' env DATABRAIN_SERVER="$STAGE/setup/mcp/server.mjs" node "$HERE/tests/test_mcp_auto_refresh.mjs"
 run_gate 'MCP and engine acceptance' env DATABRAIN_SERVER="$STAGE/setup/mcp/server.mjs" DATABRAIN_TEST_APP_ENGINE_DIR="$STAGE" bash "$HERE/tests/test_moc_override.sh"
 echo 'Completed built MCPB checksum, manifest entry point, extracted server bootstrap, and packaged-engine fixtures.'
 if ((${#failures[@]})); then

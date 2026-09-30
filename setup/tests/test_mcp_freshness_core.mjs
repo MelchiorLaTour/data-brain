@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const engine = path.resolve(process.argv[2] || path.resolve(here, '../..'));
-const { captureFreshnessBaseline, checkFreshness, scanSelectedFiles } = await import(pathToFileURL(path.join(engine, 'setup/mcp/freshness-core.mjs')));
+const { captureFreshnessBaseline, checkFreshness, flagChangedDuring, scanSelectedFiles } = await import(pathToFileURL(path.join(engine, 'setup/mcp/freshness-core.mjs')));
 
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-freshness-'));
 const requestedRoot = path.join(temp, 'selected');
@@ -65,6 +65,23 @@ const alternateRoot = path.join(temp, 'alias');
 await fs.symlink(root, alternateRoot);
 await assert.rejects(captureFreshnessBaseline({ roots: [alternateRoot], indexText: currentIndex }), /canonical absolute|unavailable|identity/i);
 await assert.rejects(captureFreshnessBaseline({ roots: [path.join(temp, 'Resources', 'Sensitive')], indexText: '' }), /Sensitive credential roots/);
+
+// A file edited while a refresh ran is flagged (so the next check refreshes again); others are untouched.
+const windowStart = Date.now() - 60000;
+const editedRecently = path.join(root, 'edited-during-refresh.md');
+const editedBefore = path.join(root, 'edited-before-refresh.md');
+await fs.writeFile(editedRecently, 'edited inside the refresh window');
+await fs.writeFile(editedBefore, 'edited before the refresh window');
+const longAgo = new Date(windowStart - 3600000);
+await fs.utimes(editedBefore, longAgo, longAgo);
+const windowBaseline = await captureFreshnessBaseline({ roots: [root], indexText: `${editedRecently}\tR\t-\t-\n${editedBefore}\tB\t-\t-\n` });
+const flaggedBaseline = await flagChangedDuring({ baselineText: windowBaseline, startedAt: windowStart, finishedAt: Date.now() + 1000 });
+assert.equal(flaggedBaseline.flagged, 1, 'exactly the file modified inside the window is flagged');
+const windowCheck = await checkFreshness({ roots: [root], indexText: `${editedRecently}\tR\t-\t-\n${editedBefore}\tB\t-\t-\n`, livePaths: [editedRecently, editedBefore], baselineText: flaggedBaseline.text });
+assert.deepEqual(windowCheck.changed, [editedRecently], 'a flagged file is reported as changed by the next check');
+const futureOnly = await flagChangedDuring({ baselineText: windowBaseline, startedAt: Date.now() + 3600000, finishedAt: Date.now() + 7200000 });
+assert.equal(futureOnly.flagged, 0, 'a window that has not happened flags nothing');
+assert.equal((await flagChangedDuring({ baselineText: windowBaseline, startedAt: windowStart, finishedAt: windowStart + 1 })).flagged, 0, 'a file modified after the window is not flagged');
 
 console.log('PASS: freshness metadata detects added, deleted, and changed indexed files without opening file contents; rejects unapproved, symlinked, and sensitive roots.');
 await fs.rm(temp, { recursive: true, force: true });
