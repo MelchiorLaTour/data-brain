@@ -76,6 +76,26 @@ export function proposeTaxonomyCandidates(indexText, roots) {
     if (keywords && keywords !== '-') for (const keyword of keywords.split(',')) previous.keywords.set(keyword, (previous.keywords.get(keyword) || 0) + 1);
     groups.set(folder, previous);
   }
+  // Too many folders to label one by one: keep the largest, fold the rest into their source root,
+  // so a root assignment still labels every file (a more specific kept folder wins on apply).
+  const MAX_GROUPS = 40;
+  if (groups.size > MAX_GROUPS) {
+    const rootKeys = new Set(roots);
+    const keep = new Set([...groups.entries()].filter(([folder]) => !rootKeys.has(folder))
+      .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+      .slice(0, Math.max(0, MAX_GROUPS - roots.length)).map(([folder]) => folder));
+    for (const [folder, info] of [...groups.entries()]) {
+      if (rootKeys.has(folder) || keep.has(folder)) continue;
+      const root = roots.filter(candidate => isInside(folder, candidate)).sort((a, b) => b.length - a.length)[0];
+      const target = groups.get(root) || { count: 0, labels: new Set(), titles: new Set(), keywords: new Map() };
+      target.count += info.count;
+      for (const label of info.labels) target.labels.add(label);
+      for (const title of info.titles) if (target.titles.size < 5) target.titles.add(title);
+      for (const [keyword, count] of info.keywords) target.keywords.set(keyword, (target.keywords.get(keyword) || 0) + count);
+      groups.set(root, target);
+      groups.delete(folder);
+    }
+  }
   const rows = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([folderPath, info]) => {
     const id = `folder-${createHash('sha1').update(folderPath).digest('hex').slice(0, 12)}`;
     const owningRoot = roots.filter(candidate => isInside(folderPath, candidate)).sort((a, b) => b.length - a.length)[0];

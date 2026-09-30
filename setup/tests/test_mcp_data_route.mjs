@@ -153,7 +153,7 @@ try {
   assert.equal(resumedInit.result.serverInfo.name, 'databrain');
   server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
   const restartStatus = await request(1301, 'tools/call', { name: 'databrain_setup_status', arguments: {} });
-  assert(restartStatus.result.content[0].text.includes('Stage: indexing') && restartStatus.result.content[0].text.includes('rerun databrain_setup_run'), `server restart lost the interrupted setup checkpoint: ${restartStatus.result.content[0].text}`);
+  assert(restartStatus.result.content[0].text.includes('Stage: indexing') && restartStatus.result.content[0].text.includes('Call databrain_setup_run now to resume'), `server restart lost the interrupted setup checkpoint: ${restartStatus.result.content[0].text}`);
   const resumedSetup = await request(20, 'tools/call', { name: 'databrain_setup_run', arguments: {} });
   assert(resumedSetup.result.content[0].text.includes('Indexing started'), `cancelled setup could not resume: ${resumedSetup.result.content[0].text}`);
   let setupStatus = '';

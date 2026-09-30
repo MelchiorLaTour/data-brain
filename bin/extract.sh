@@ -69,15 +69,15 @@ extract_text() {
   case "$ext" in
     pdf)
       if command -v pdftotext >/dev/null 2>&1; then
-        t="$(pdftotext -q "$f" - 2>/dev/null)"
+        t="$(limit pdftotext -q "$f" - 2>/dev/null)"
       elif [ -x /usr/bin/osascript ] && [ -f "$ROOT/setup/mcp/pdf-extract.js" ]; then
-        t="$(/usr/bin/osascript -l JavaScript "$ROOT/setup/mcp/pdf-extract.js" "$f" 2>/dev/null)"
+        t="$(limit /usr/bin/osascript -l JavaScript "$ROOT/setup/mcp/pdf-extract.js" "$f" 2>/dev/null)"
       fi
       ;;
-    docx|doc|rtf)    t="$(textutil -convert txt -stdout "$f" 2>/dev/null)"
-                     [ -n "$t" ] || t="$(pandoc -t plain "$f" 2>/dev/null)" ;;
-    pages)           t="$(textutil -convert txt -stdout "$f" 2>/dev/null)"
-                     [ -n "$t" ] || t="$(pandoc -t plain "$f" 2>/dev/null)" ;;
+    docx|doc|rtf)    t="$(limit textutil -convert txt -stdout "$f" 2>/dev/null)"
+                     [ -n "$t" ] || t="$(limit pandoc -t plain "$f" 2>/dev/null)" ;;
+    pages)           t="$(limit textutil -convert txt -stdout "$f" 2>/dev/null)"
+                     [ -n "$t" ] || t="$(limit pandoc -t plain "$f" 2>/dev/null)" ;;
     md|markdown|txt) t="$(cat "$f" 2>/dev/null)" ;;
   esac
   printf '%s' "$t"
@@ -94,6 +94,10 @@ derive_keywords() {
 }
 
 is_offloaded() { ls -lO "$1" 2>/dev/null | grep -q 'dataless'; }
+
+# Per-file time limit so one bad or offline file is recorded as failed instead of freezing setup.
+EXTRACT_TIMEOUT="${NB_EXTRACT_TIMEOUT:-120}"
+limit() { /usr/bin/perl -e 'alarm shift; exec @ARGV' "$EXTRACT_TIMEOUT" "$@"; }
 
 processed=0; extracted=0; keyword_only=0; skipped_fresh=0; failed=0; downloaded=0; evicted=0; titled_only=0
 while IFS=$'\t' read -r path title themes keywords; do
@@ -138,6 +142,7 @@ while IFS=$'\t' read -r path title themes keywords; do
   fi
   [ "$LIMIT" -gt 0 ] && [ "$processed" -ge "$LIMIT" ] && break
   processed=$((processed+1))
+  [ $((processed % 25)) -eq 0 ] && printf '%s\n' "$processed" > "$MOC/extract-progress.txt"
 
   was_off=0; if is_offloaded "$f"; then was_off=1; downloaded=$((downloaded+1)); fi
   if ! exec 9<"$f"; then
@@ -149,7 +154,7 @@ while IFS=$'\t' read -r path title themes keywords; do
     failed=$((failed+1)); printf '%s\tsource_changed_before_open\n' "$path" >> "$REPORT_TMP"; continue
   fi
   staged_source="$tmpd/source.$ext"
-  if ! cat /dev/fd/9 > "$staged_source"; then
+  if ! limit cat /dev/fd/9 > "$staged_source"; then
     exec 9<&-
     failed=$((failed+1)); printf '%s\tread_failed\n' "$path" >> "$REPORT_TMP"; continue
   fi
@@ -213,6 +218,7 @@ while IFS=$'\t' read -r path title themes keywords; do
   fi
 done < "$INDEX"
 
+rm -f "$MOC/extract-progress.txt"
 REPORT="$MOC/extract-report.tsv"
 mv "$REPORT_TMP" "$REPORT"
 

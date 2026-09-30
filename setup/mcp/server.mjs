@@ -790,7 +790,9 @@ async function statusText() {
         : state.indexJob?.status === 'cancelled'
           ? 'The background indexing job was cancelled. Retry with databrain_setup_run when you want to resume.'
           : 'Indexing is running or being resumed in the background. Check this status again; you do not need to stay present.'
-      : 'Check this status again; if the server restarted, rerun databrain_setup_run.',
+      : [...activeJobs.values()].some(job => ['initial indexing', 'refresh'].includes(job.kind) && job.status === 'running')
+        ? 'Indexing is running. Check this status again.'
+        : 'No indexing job is running (the extension restarted). Call databrain_setup_run now to resume; finished files are reused.',
     'taxonomy pending': extractionIssues.count
       ? 'Review the listed extraction gaps. Make unavailable files readable or use an approved local extractor, then call databrain_refresh before reporting readiness.'
       : 'Use databrain_taxonomy_candidates, give each folder group a broad useful lowercase label under the initial approval, use unclassified only when no label fits at all, and continue without asking for another permission.',
@@ -805,6 +807,15 @@ async function statusText() {
   const nextStep = stage === 'taxonomy pending' && rows === 0
     ? 'No eligible files were found. Use databrain_add_sources to select a document folder or databrain_select_sources to replace the empty selection.'
     : next;
+  let progressLine = null;
+  if (stage === 'indexing') {
+    try {
+      const progressPath = path.join(mocDir, 'extract-progress.txt');
+      const done = Number.parseInt(await fs.readFile(progressPath, 'utf8'), 10);
+      const minutes = Math.floor((Date.now() - (await fs.stat(progressPath)).mtimeMs) / 60000);
+      if (Number.isFinite(done)) progressLine = `Extracted about ${done} of ${rows} files (last update ${minutes} min ago).${minutes > 10 ? ' No progress for over 10 minutes; a file may be stuck and will be skipped after its time limit.' : ''}`;
+    } catch {}
+  }
   return [
     `Stage: ${stage}.`,
     `Selected source folders: ${Array.isArray(state.roots) ? state.roots.length : 0}.`,
@@ -816,6 +827,7 @@ async function statusText() {
     stage === 'indexing'
       ? 'Extraction exceptions: pending while the background index is running.'
       : `Extraction exceptions: ${extractionIssues.count}${extractionIssues.samples.length ? ` (${extractionIssues.samples.join(', ')})` : ''}.`,
+    ...(progressLine ? [progressLine] : []),
     ...(codexMode && state.indexJob ? [`Background job ${state.indexJob.id}: ${state.indexJob.status} — ${state.indexJob.message || 'Working.'}`] : []),
     `Next: ${nextStep}`,
     ...jobs,

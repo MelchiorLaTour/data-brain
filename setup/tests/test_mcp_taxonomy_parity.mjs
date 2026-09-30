@@ -91,6 +91,14 @@ try {
   assert.throws(() => applyConfirmedTaxonomy(index, roots, [{ folder: path.join(temp, 'unapproved'), categories: ['valid'] }]), /outside the selected source folders/);
   assert.throws(() => applyConfirmedTaxonomy(index, roots, [{ folder: path.join(source, 'Projects'), categories: ['Not valid'] }]), /lowercase names/);
   assert.throws(() => applyConfirmedTaxonomy(index, roots, [{ folder: path.join(source, 'Projects'), categories: [] }]), /1–5 categories/);
+  const manyRoot = path.join(temp, 'many');
+  const manyFiles = Array.from({ length: 60 }, (_, i) => path.join(manyRoot, `folder-${i}`, 'note.md'));
+  const manyIndex = ['# path\ttitle\tcategory\tkeywords', ...manyFiles.map((file, i) => `${file}\tNote ${i}\t-\tk${i}`), ''].join('\n');
+  const manyProposal = proposeTaxonomyCandidates(manyIndex, [manyRoot]);
+  assert(manyProposal.rows.length <= 40, `60 folders must fold to at most 40 rows, got ${manyProposal.rows.length}`);
+  assert.equal(manyProposal.rows.reduce((sum, row) => sum + row.files, 0), 60, 'folded rows must still account for every file');
+  const manyApplied = applyConfirmedTaxonomy(manyIndex, [manyRoot], manyProposal.rows.map(row => ({ folder: row.folderPath, categories: ['bulk'] })));
+  assert.equal(manyApplied.changed, 60, 'every file must be labeled after applying the folded rows');
   process.stdout.write('PASS: app and Terminal taxonomy proposals match and expose metadata only; confirmed application preserves labels, ungranted rows, and originals.\n');
 } finally {
   await fs.rm(temp, { recursive: true, force: true });
