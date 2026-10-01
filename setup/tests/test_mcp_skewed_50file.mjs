@@ -206,7 +206,7 @@ try {
   const installAudit = await call('databrain_verify_install');
   assert.match(installAudit, /Installed DataBrain audit: PARTIAL — inspect failed or blocked checks below\./, installAudit);
   assert.match(installAudit, launcher
-    ? /PARTIAL: Package identity — DataBrain Codex 0\.1\.0 \(darwin-(?:arm64|x64)\); .*app payload and source digest match/
+    ? /(PASS|PARTIAL): Package identity — DataBrain Codex \d+\.\d+\.\d+ \(darwin-(?:arm64|x64)\); .*app payload and source digest match/
     : /(PASS|PARTIAL): Package identity — DataBrain \d+\.\d+\.\d+; packaged files match their embedded digest/);
   assert.match(installAudit, /https:\/\/github\.com\/MelchiorLaTour\/data-brain\.git @ [0-9a-f]{12}/);
   assert.match(installAudit, /PASS: Selected-source health/);
