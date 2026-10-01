@@ -45,6 +45,8 @@ node "$ROOT/setup/tests/test_codex_bundle.mjs" "$BUNDLE"
 env DATABRAIN_TEST_LAUNCHER="$CONTENTS/MacOS/databrain-mcp" \
   node "$ROOT/setup/tests/test_codex_onboarding.mjs"
 env DATABRAIN_TEST_LAUNCHER="$CONTENTS/MacOS/databrain-mcp" \
+  node "$ROOT/setup/tests/test_codex_auto_refresh.mjs"
+env DATABRAIN_TEST_LAUNCHER="$CONTENTS/MacOS/databrain-mcp" \
   node "$ROOT/setup/tests/test_mcp_skewed_50file.mjs" "$RESOURCES"
 env DATABRAIN_TEST_LAUNCHER="$CONTENTS/MacOS/databrain-mcp" \
   node "$ROOT/setup/tests/test_codex_mixed_50file.mjs" "$RESOURCES"

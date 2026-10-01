@@ -165,15 +165,10 @@ try {
   assert(assignments.every(assignment => assignment.folder_id), 'each category needs its actual MCP proposal ID');
   await call('databrain_apply_taxonomy', { assignments });
   const taxonomyStatus = await waitForStatus(status =>
-    status.includes('Stage: relationships pending.') && /taxonomy application: complete/.test(status),
+    status.includes('Stage: verification pending.') && /taxonomy application: complete/.test(status),
   'confirmed category application');
-  assert(taxonomyStatus.includes('relationships pending'));
-
-  await call('databrain_build_relationships');
-  const relationshipStatus = await waitForStatus(status =>
-    status.includes('Stage: verification pending.') && /relationship report: complete/.test(status),
-  'relationship report completion');
-  assert(relationshipStatus.includes('Stage: verification pending.'));
+  assert(taxonomyStatus.includes('verification pending'));
+  assert.match(taxonomyStatus, /Relationship report saved for 50 indexed rows/);
 
   const indexText = await fs.readFile(path.join(dataHome, 'moc', 'index.tsv'), 'utf8');
   const indexedRows = indexText.split('\n').filter(line => line && !line.startsWith('#')).map(line => line.split('\t'));

@@ -240,10 +240,6 @@ async function launchCase(name, approved, preseedIncomplete = false, resumeInter
       assert.match(await readFile(path.join(destination, 'moc', 'index.tsv'), 'utf8'), /\tprojects\t/);
       assert.match(await call('databrain_search', { query: 'release decision approved source files' }), /plan\.md/);
     }
-    const relationshipStatus = await waitFor(value => value.includes('Stage: relationships pending'));
-    assert.match(relationshipStatus, /no extra approval is needed/);
-    const relationships = await call('databrain_build_relationships');
-    assert(relationships.includes('started as job'));
     if (relationshipCrashAfter) {
       await waitForChildExit(server);
       assert.equal(server.exitCode, 89, `relationship commit must crash at ${relationshipCrashAfter}`);
@@ -257,7 +253,7 @@ async function launchCase(name, approved, preseedIncomplete = false, resumeInter
       server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
       if (relationshipCrashAfter === 'report') {
         assert.match(await call('databrain_setup_status'), /Stage: relationships pending/);
-        assert.match(await call('databrain_build_relationships'), /started as job/);
+        await waitFor(value => value.includes('Stage: verification pending'));
       } else {
         assert.match(await call('databrain_setup_status'), /Stage: verification pending/);
         await assert.rejects(lstat(path.join(destination, '.databrain', 'codex-relationship-commit-pending.tsv')), { code: 'ENOENT' });
