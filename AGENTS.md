@@ -13,7 +13,7 @@ Read `setup/codex/CHATGPT-DESKTOP.md` and `setup/codex/INSTALL.md` before acting
   If none exists, stop: do not install unsigned bundles from `setup/codex/dist/`, build a
   client package from this checkout, or claim that installation succeeded.
 - When a stable release exists, run only `setup/codex/bootstrap.sh`. It verifies the release,
-  checksum, source binding, signature, and Gatekeeper result before installing and registering
+  checksum, source binding, and embedded payload hashes before installing and registering
   the local MCP server. Never bypass macOS security checks.
 - The user's request to install authorizes the described download, app installation, and
   `databrain` MCP registration. Report the exact app path and whether registration was added
