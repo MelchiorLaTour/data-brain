@@ -118,10 +118,9 @@ try {
     await initialize(first);
     const started = await call(first, 'databrain_setup_start');
     assert.match(started, /Creating DataBrain under the parent selected in Claude Desktop settings/);
-    const sourceState = await waitForStage(first, 'sources selected');
-    assert.match(sourceState, /Selected source folders: 1/);
-    assert.match(await call(first, 'databrain_setup_run'), /Indexing started/);
-    await waitForStage(first, 'taxonomy pending');
+    assert.match(started, /Indexing the approved source folders starts automatically/);
+    const indexedState = await waitForStage(first, 'taxonomy pending');
+    assert.match(indexedState, /Selected source folders: 1/);
     const hit = await call(first, 'databrain_search', { query: 'bluejay lifecycle needle' });
     assert.match(hit, /only-record\.md/, hit);
   } finally {

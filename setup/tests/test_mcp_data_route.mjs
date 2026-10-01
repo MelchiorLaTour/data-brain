@@ -50,6 +50,7 @@ function startServer() {
       ...process.env,
       DATABRAIN_ENGINE_DIR: engine,
       DATABRAIN_TEST_HOME: dataHome,
+      DATABRAIN_TEST_STEP_BY_STEP: '1', // this test steps through the relationship stage itself
       DATABRAIN_TEST_SELECTION_FILE: selectionFile,
       DATABRAIN_TEST_OPEN_PATH: openRace.target,
       DATABRAIN_TEST_OPEN_ARM: openRace.arm,
@@ -282,6 +283,19 @@ try {
   await fs.writeFile(symlinkTarget, '# Project note\nA synthetic project note about account recovery.\n');
   await fs.symlink(symlinkTarget, symlinkPath);
   await fs.appendFile(indexPath, `${missingPdf}\tmissing synthetic PDF\t-\t-\n${conflictPath}\tDecision record\t-\tfixture\n${symlinkPath}\tunsafe source link\t-\t-\n`);
+  const pruneRefresh = await request(91, 'tools/call', { name: 'databrain_refresh', arguments: {} });
+  assert(pruneRefresh.result.content[0].text.includes('Indexing started'), `prune refresh did not start: ${pruneRefresh.result.content[0].text}`);
+  for (let attempt = 0; attempt < 600 && (await fs.readFile(indexPath, 'utf8')).includes(missingPdf); attempt += 1) await new Promise(resolve => setTimeout(resolve, 50));
+  assert(!(await fs.readFile(indexPath, 'utf8')).includes(missingPdf), 'a manual refresh must drop the row of a file that no longer exists');
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const settled = await request(700 + attempt, 'tools/call', { name: 'databrain_setup_status', arguments: {} });
+    if (settled.result.content[0].text.includes('Stage: taxonomy pending')) break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  // The extraction-exception route needs a real file that cannot be extracted; it is deleted again afterwards
+  // so the relationship report still sees an indexed file that is gone.
+  await fs.writeFile(missingPdf, 'not a pdf\n');
+  await fs.appendFile(indexPath, `${missingPdf}\tmissing synthetic PDF\t-\t-\n`);
   const refresh = await request(92, 'tools/call', { name: 'databrain_refresh', arguments: {} });
   assert(refresh.result.content[0].text.includes('Indexing started'), `exception refresh did not start: ${refresh.result.content[0].text}`);
   let exceptionStatus = '';
@@ -294,6 +308,7 @@ try {
   }
   assert(exceptionStatus.includes('Extraction exceptions: 1 (missing.pdf)'), `status hid the extraction exception or recovery action: ${exceptionStatus}`);
   assert(exceptionStatus.includes('databrain_refresh'), 'status did not tell the user how to retry after an extraction exception');
+  await fs.rm(missingPdf);
   // Rebuild the terminal artifacts independently from the same indexed rows the app now serves.
   await fs.copyFile(indexPath, path.join(terminalMoc, 'index.tsv'));
   runTerminal('extract.sh');

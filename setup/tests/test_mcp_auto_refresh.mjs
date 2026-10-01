@@ -56,14 +56,11 @@ const indexRows = async () => (await fs.readFile(indexPath, 'utf8')).split('\n')
 try {
   await rpc('initialize', { protocolVersion: '2025-03-26' });
   server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
-  await call('databrain_setup_start');
-  await waitFor(stageIs('sources selected'), 'sources selected');
-  await call('databrain_setup_run');
+  await call('databrain_setup_start'); // indexing starts by itself
   await waitFor(stageIs('taxonomy pending'), 'taxonomy pending');
   const candidates = (await call('databrain_taxonomy_candidates')).split('\n').filter(line => line.startsWith('folder-')).map(line => line.split('\t'));
   await call('databrain_apply_taxonomy', { assignments: candidates.map(cols => ({ folder_id: cols[0], categories: [/notes/.test(cols[1]) ? 'notes' : 'docs'] })) });
-  await waitFor(stageIs('relationships pending'), 'relationships pending');
-  await call('databrain_build_relationships');
+  // applying the categories now builds the relationship report itself
   await waitFor(stageIs('verification pending'), 'verification pending');
   assert.equal((await indexRows()).length, 5);
 
@@ -115,5 +112,5 @@ try {
   throw new Error(`${error.message}${stderr ? `\nMCP stderr: ${stderr.slice(0, 1500)}` : ''}`);
 } finally {
   server.kill('SIGTERM');
-  await fs.rm(temp, { recursive: true, force: true });
+  await fs.rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); // a background refresh may still be finishing
 }

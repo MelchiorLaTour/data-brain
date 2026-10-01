@@ -5,19 +5,20 @@ search, read, and honestly abstain over YOUR notes without moving or editing the
 It stores derived search data, including extracted text, in its own working folder. The
 terminal engine uses bash and sqlite FTS5 without a model call or network connection.
 
-**Claude Desktop release status:** The macOS extension is available as an explicitly unverified
-[v0.1.0 prerelease](https://github.com/MelchiorLaTour/data-brain/releases/tag/v0.1.0). Its
-package and synthetic local tests pass; installation in Claude Desktop, Claude-generated
-queries, and held-out answer quality remain unverified. The v0.1.0 install audit also cannot
-match prereleases; a tested source fix is included in an unpublished local package candidate.
-A corrected release still needs a new version and physical app acceptance. Check the
-[acceptance ledger](setup/ACCEPTANCE.md) before using it with personal files. The terminal
-route remains available through [INSTALL.md](INSTALL.md).
+## Download for Claude Desktop (macOS)
+
+**[Download databrain.mcpb (v0.1.5)](https://github.com/MelchiorLaTour/data-brain/releases/download/v0.1.5/databrain.mcpb)** — one file, no checksum or command needed.
+
+1. Download the file above to your Downloads folder.
+2. In Claude Desktop choose **Claude → Settings → Extensions → Advanced settings → Extension Developer → Install Extension…** and select `databrain.mcpb`.
+3. In the DataBrain extension settings, pick where DataBrain keeps its folder and which document folders it may search. Start a new chat and say **"Set up my DataBrain."**
+
+Full step-by-step guide: [app guide](setup/docs/databrain-app-guide.html). Status: **pre-release**. Tested in Claude Desktop on one Mac with a small sample folder (install, setup, search, deleted files); large folders and surviving a restart are not yet tested. Details in the [acceptance ledger](setup/ACCEPTANCE.md). The terminal route for Claude Code remains available through [INSTALL.md](INSTALL.md).
 
 ## Compatibility
 
 The terminal setup targets Claude Code on macOS. A separate Claude Desktop extension is
-published as an unverified prerelease; it has not passed a physical install. Its package,
+published as a pre-release; the acceptance ledger above records what has been tested. Its package,
 setup flow, tests, and current limits are described in
 [setup/README.md](setup/README.md). [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) describes
 the older terminal integration; use the acceptance ledger above for the extension's status.

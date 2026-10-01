@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "databrain",
   "display_name": "DataBrain",
-  "version": "0.1.1",
+  "version": "0.1.5",
   "description": "Create and search a private local index of folders you choose.",
   "author": {
     "name": "Melchior La Tour"

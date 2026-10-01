@@ -17,7 +17,7 @@ function startServer(parent, roots) {
     serverScript,
     '--databrain-parent', parent,
     '--databrain-source-roots', ...roots,
-  ], { env: { ...process.env, HOME: path.join(temp, 'home') }, stdio: ['pipe', 'pipe', 'pipe'] });
+  ], { env: { ...process.env, HOME: path.join(temp, 'home'), DATABRAIN_TEST_STEP_BY_STEP: '1' }, stdio: ['pipe', 'pipe', 'pipe'] }); // checks the state before indexing; the default flow indexes at once (test_mcp_setup_finish.mjs)
   const replies = new Map();
   const errors = [];
   const lines = readline.createInterface({ input: server.stdout });

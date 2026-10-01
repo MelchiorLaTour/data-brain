@@ -164,15 +164,10 @@ try {
   }));
   assert(assignments.every(assignment => assignment.folder_id), 'each category needs its actual MCP proposal ID');
   await call('databrain_apply_taxonomy', { assignments });
-  const taxonomyStatus = await waitForStatus(status =>
-    status.includes('Stage: relationships pending.') && /taxonomy application: complete/.test(status),
-  'confirmed category application');
-  assert(taxonomyStatus.includes('relationships pending'));
-
-  await call('databrain_build_relationships');
+  // applying the categories now builds the relationship report itself, in the same job
   const relationshipStatus = await waitForStatus(status =>
-    status.includes('Stage: verification pending.') && /relationship report: complete/.test(status),
-  'relationship report completion');
+    status.includes('Stage: verification pending.') && /taxonomy application: complete/.test(status),
+  'category application and relationship report');
   assert(relationshipStatus.includes('Stage: verification pending.'));
 
   const indexText = await fs.readFile(path.join(dataHome, 'moc', 'index.tsv'), 'utf8');

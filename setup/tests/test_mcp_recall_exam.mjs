@@ -275,6 +275,7 @@ try {
     env: { ...process.env, HOME: serverHome, DATABRAIN_ENGINE_DIR: engine,
       DATABRAIN_TEST_HOME: dataHome, DATABRAIN_TEST_PARENT: desktop,
       DATABRAIN_TEST_SELECTION_FILE: selectionFile,
+      DATABRAIN_TEST_STEP_BY_STEP: '1', // this test swaps in a prebuilt index, so indexing must not start on its own
       DATABRAIN_TEST_SOURCE_ROOTS: JSON.stringify([await fs.realpath(corpus)]),
       PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
     stdio: ['pipe', 'pipe', 'pipe'],
