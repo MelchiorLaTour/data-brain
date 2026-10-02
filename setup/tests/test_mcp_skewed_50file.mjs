@@ -131,6 +131,13 @@ try {
     await waitForStatus(status => status.includes('Stage: sources selected.'), 'disposable source selection');
     await call('databrain_setup_run');
   }
+  // The privacy screen may hold fixture names that look private; the user here says all of them are fine.
+  const afterScan = await waitForStatus(status => status.startsWith('SETUP PAUSED FOR PRIVACY REVIEW') || status.includes('Stage: taxonomy pending.'), 'privacy scan or indexing');
+  if (afterScan.startsWith('SETUP PAUSED FOR PRIVACY REVIEW')) {
+    const held = (await call('databrain_privacy', { action: 'list' })).split('\n').filter(line => /^\d+\. /.test(line));
+    console.log(`privacy screen held ${held.length} fixture file(s): ${held.slice(0, 3).join(' | ')}`);
+    await call('databrain_privacy', { action: 'decide', keep: held.map((line, index) => index + 1) });
+  }
   const indexedStatus = await waitForStatus(status =>
     status.includes('Stage: taxonomy pending.') && status.includes('Indexed rows: 50.') &&
       (launcher ? /initial setup permissions: complete/.test(status) : /initial indexing: complete/.test(status)),

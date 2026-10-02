@@ -41,10 +41,19 @@ selected_root_find0 "$SRC" "${PRUNE_DIRS[@]}" -type f \( \
   "${PRUNE_FIND[@]}" > "$relative" || { echo 'ingest-root: selected folder changed identity during traversal; no new rows were written' >&2; exit 2; }
 while IFS= read -r -d '' f; do printf '%s\n' "$f"; done < "$relative" | sort > "$found"
 
+# Privacy screen: only NEW files are checked (names, then text of md/txt); held ones never become rows.
+dropped="$tmpd/dropped"; : > "$dropped"
+if [ -n "${NB_PRIVACY_FILE:-}" ]; then
+  comm -23 "$found" "$existing" > "$tmpd/candidates"
+  /usr/bin/perl "$ROOT/bin/privacy.pl" filter < "$tmpd/candidates" > "$tmpd/kept" || { echo 'ingest-root: privacy screen failed' >&2; exit 2; }
+  comm -23 "$tmpd/candidates" "$tmpd/kept" > "$dropped"
+fi
+
 added=0; skipped=0; unsafe=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   if grep -qxF "$f" "$existing"; then skipped=$((skipped + 1)); continue; fi
+  if [ -s "$dropped" ] && grep -qxF "$f" "$dropped"; then continue; fi
   base="$(basename "$f")"
   ext="${base##*.}"
   title="$(basename "$f" ".$ext" | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2} //')"

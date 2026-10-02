@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataBrain for Claude Desktop</title>
+  <style>
+    :root { color-scheme: dark; --paper:#080a0d; --panel:#11151b; --ink:#f4f6f8; --muted:#a8b0bc; --accent:#91e6c2; --line:#29323d; --warn:#f1c98d; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:18px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { width:min(720px,100%); margin:0 auto; padding:44px 24px 56px; }
+    .eyebrow { color:var(--accent); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+    h1 { margin:10px 0 22px; font-size:40px; line-height:1.05; letter-spacing:-.03em; }
+    h2 { margin:34px 0 8px; font-size:20px; line-height:1.2; }
+    ol { margin:0; padding:0; list-style:none; }
+    li.step { display:flex; gap:14px; align-items:baseline; padding:13px 0; border-top:1px solid var(--line); }
+    li.step:last-child { border-bottom:1px solid var(--line); }
+    .n { flex:none; min-width:54px; color:var(--accent); font-weight:700; font-variant-numeric:tabular-nums; }
+    .text { flex:1; }
+    .hint { display:block; margin-top:2px; color:var(--muted); font-size:15px; }
+    code, .copy { font:600 16px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:3px 8px; color:var(--ink); }
+    .copy { cursor:pointer; display:inline-block; margin-top:6px; text-align:left; }
+    .copy:hover, .copy:focus-visible { border-color:var(--accent); outline:none; }
+    .copy::after { content:"  copy"; color:var(--muted); font-weight:400; font-size:13px; }
+    .copy.done::after { content:"  copied"; color:var(--accent); }
+    .download { display:inline-block; margin-top:6px; padding:9px 16px; border-radius:8px; background:var(--accent); color:#06120d; font-weight:700; text-decoration:none; }
+    .download:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+    .check { color:var(--warn); font-size:13px; font-weight:700; letter-spacing:.04em; }
+    .done-line { margin:18px 0 0; font-size:22px; font-weight:700; }
+    .note { margin:10px 0 0; color:var(--muted); font-size:15px; }
+    ul { margin:0; padding-left:20px; color:var(--muted); font-size:16px; }
+    li + li { margin-top:4px; }
+    .prerelease { margin-top:30px; color:var(--warn); font-size:14px; }
+    a { color:var(--accent); }
+    @media print { body { font-size:14px; } main { padding:18px 30px; } h1 { font-size:30px; margin-bottom:12px; } li.step { padding:7px 0; } h2 { margin-top:16px; } .copy::after { content:""; } }
+    @media (max-width:520px) { h1 { font-size:32px; } li.step { flex-direction:column; gap:2px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">DataBrain · Claude Desktop · Mac</div>
+    <h2>What DataBrain will not read</h2>
+    <ul>
+      <li>Folders named <code>Resources/Sensitive</code>, <code>.git</code>, <code>node_modules</code>, <code>.obsidian</code>, <code>.ssh</code>, <code>.gnupg</code> and <code>.aws</code>, and any file that is not <code>.md</code>, <code>.txt</code>, <code>.pdf</code>, <code>.docx</code>, <code>.doc</code>, <code>.pages</code> or <code>.rtf</code>.</li>
+      <li>Names are checked first, then text is checked on your Mac. Nothing is sent.</li>
+      <li>Anything that looks private is held back until you say it is fine: taxes, bank, ID, medical, payslips, passwords, keys, contracts, in English and French, and any text with an IBAN, card number, social security number or private key.</li>
+      <li>Scanned images such as <code>IMG_2231.jpg</code> are not checked.</li>
+    </ul>
+
+    <h1>Do this:</h1>
+
+    <ol>
+      <li class="step"><span class="n">1 →</span><span class="text">Download the file. <a class="download" href="https://github.com/MelchiorLaTour/data-brain/releases/download/v0.1.6/databrain-0.1.6.mcpb">Download databrain-0.1.6.mcpb</a></span></li>
+      <li class="step"><span class="n">2 →</span><span class="text">Open <strong>Claude → Settings… → Extensions</strong>.<span class="hint"><strong>Extensions</strong> is in the left list, under <strong>This computer</strong>.</span></span></li>
+      <li class="step"><span class="n">3 →</span><span class="text">Click <strong>Advanced settings</strong>.</span></li>
+      <li class="step"><span class="n">4 →</span><span class="text">Click <strong>Install extension</strong>.<span class="hint">It is at the bottom of the page, under <strong>Extension developer</strong>.</span></span></li>
+      <li class="step"><span class="n">5 →</span><span class="text">In the window that opens, click <strong>databrain-0.1.6.mcpb</strong>, then click <strong>Open</strong> at the bottom right. <span class="check">[CHECK]</span><span class="hint">It is in <strong>Downloads</strong>, in the left list. If your Mac added a number to the name, such as <strong>databrain-0.1.6 (1).mcpb</strong>, click that one.</span></span></li>
+      <li class="step"><span class="n">6 →</span><span class="text">Click <strong>Install</strong>.<span class="hint">The <strong>Configure DataBrain</strong> window opens next.</span></span></li>
+      <li class="step"><span class="n">7 →</span><span class="text">Under <strong>Folders DataBrain may use</strong>, click <strong>Add directory</strong> and pick <strong>Desktop</strong>. Do it again for <strong>Documents</strong>. Nothing gets moved. <span class="check">[CHECK]</span><span class="hint">Click <strong>Add directory</strong>. An empty row appears. Click the <strong>folder icon</strong> at the right end of that row. In the window that opens, click <strong>Desktop</strong> in the left list, then click <strong>Open</strong> at the bottom right. The row now shows your Desktop folder. Click <strong>Add directory</strong> again and do the same with <strong>Documents</strong>. Leave <strong>DataBrain folder location</strong> as it is. To search other folders later, add them here the same way. If you close this window by mistake, open <strong>Claude → Settings… → Extensions → DataBrain → Configure</strong>.</span></span></li>
+      <li class="step"><span class="n">8 →</span><span class="text">Click <strong>Save</strong>.</span></li>
+      <li class="step"><span class="n">9 →</span><span class="text">You can delete the downloaded file now.<span class="hint">It is in your <strong>Downloads</strong> folder.</span></span></li>
+      <li class="step"><span class="n">10 →</span><span class="text">In a new chat, send this message:<br><button class="copy" data-copy="Set up my DataBrain">Set up my DataBrain</button><span class="hint">Claude may list files that look private and ask which are fine to index. If you are not sure, say <strong>none</strong>.</span></span></li>
+      <li class="step"><span class="n">11 →</span><span class="text">When your Mac asks to let Claude access your Desktop or Documents folder, click <strong>OK</strong> (or <strong>Allow</strong>). <span class="check">[CHECK]</span><span class="hint">It can appear while Claude sets up. Documents, Desktop, Downloads, iCloud Drive, and external drives each ask once.</span></span></li>
+      <li class="step"><span class="n">12 →</span><span class="text">When Claude says DataBrain is set up, send this message:<br><button class="copy" data-copy="In DataBrain, what&#39;s in my [a file name from your Desktop]?">In DataBrain, what&#39;s in my [a file name from your Desktop]?</button></span></li>
+    </ol>
+    <p class="done-line">That's all.</p>
+    <p class="note">DataBrain lives in your home folder: <strong>Finder → Go → Home</strong>.</p>
+
+    <h2>Your files are safe</h2>
+    <ul>
+      <li>DataBrain only reads your files. It never changes, moves, or deletes them.</li>
+      <li>The search index stays on your Mac, in the DataBrain folder.</li>
+      <li>Claude sees only the passages it pulls up to answer your question.</li>
+    </ul>
+
+    <h2>If something goes wrong</h2>
+    <ul>
+      <li>Claude can't read your files: open <strong>System Settings → Privacy &amp; Security → Files &amp; Folders</strong>, turn on <strong>Claude</strong> <span class="check">[CHECK]</span>, then send <code>Continue setting up my DataBrain</code></li>
+      <li>Claude says a DataBrain folder already exists: do what Claude tells you.</li>
+      <li>Anything else: send <code>Run DataBrain diagnostics</code> and pass Claude's reply to whoever sent you this guide.</li>
+    </ul>
+
+    <p class="prerelease">Pre-release: tested on one Mac.</p>
+  </main>
+  <script>
+    document.querySelectorAll('.copy').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var text = b.getAttribute('data-copy');
+        var mark = function () { b.classList.add('done'); setTimeout(function () { b.classList.remove('done'); }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(mark, function () {});
+      });
+    });
+  </script>
+</body>
+</html>

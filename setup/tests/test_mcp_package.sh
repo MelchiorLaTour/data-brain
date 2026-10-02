@@ -36,7 +36,7 @@ expected_files = {
     'bin/build-fts.sh', 'bin/build-index.sh', 'bin/canon.sh', 'bin/extract.sh',
     'bin/fts.sh', 'bin/index-add.sh', 'bin/ingest-root.sh', 'bin/inventory.sh',
     'bin/look.sh', 'bin/rebuild.sh', 'bin/relationships.sh', 'bin/refresh.sh', 'bin/taxonomy.sh',
-    'bin/prune-missing.sh',
+    'bin/prune-missing.sh', 'bin/privacy.pl', 'bin/privacy-names.sh',
     'setup/mcp/folder-picker.js', 'setup/mcp/freshness-core.mjs',
     'setup/mcp/github-release-check.mjs', 'setup/mcp/codex-state.mjs', 'setup/mcp/pdf-extract.js',
     'setup/mcp/relationship-core.mjs', 'setup/mcp/server.mjs', 'setup/mcp/package-identity.mjs',
@@ -64,7 +64,9 @@ assert config['args'] == [
     '--databrain-source-roots', '${user_config.source_roots}',
 ], 'MCPB must pass its settings-selected parent and all source roots as argv values'
 assert manifest['user_config']['data_parent']['type'] == 'directory'
+# optional with a home-folder default: nobody has to choose a location
 assert 'default' not in manifest['user_config']['data_parent']
+assert manifest['user_config']['data_parent']['required'] is False
 assert manifest['user_config']['source_roots']['type'] == 'directory'
 assert manifest['user_config']['source_roots']['multiple'] is True
 PY

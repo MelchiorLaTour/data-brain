@@ -33,6 +33,8 @@ ENGINE_BIN_FILES=(
   refresh.sh
   taxonomy.sh
   prune-missing.sh
+  privacy.pl
+  privacy-names.sh
 )
 for file in "${ENGINE_BIN_FILES[@]}"; do
   [ -f "$ROOT/bin/$file" ] || { echo "build: missing required engine script bin/$file" >&2; exit 2; }

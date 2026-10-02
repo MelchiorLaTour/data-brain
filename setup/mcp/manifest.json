@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "databrain",
   "display_name": "DataBrain",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Create and search a private local index of folders you choose.",
   "author": {
     "name": "Melchior La Tour"
@@ -25,9 +25,9 @@
   "user_config": {
     "data_parent": {
       "type": "directory",
-      "title": "DataBrain folder location",
-      "description": "Choose where DataBrain may create its own DataBrain folder after you start setup in chat.",
-      "required": true
+      "title": "DataBrain folder location (optional)",
+      "description": "Leave as is. DataBrain creates its own DataBrain folder in your home folder when you set it up in chat. Choose another folder only if you want it elsewhere.",
+      "required": false
     },
     "source_roots": {
       "type": "directory",

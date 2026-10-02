@@ -32,6 +32,11 @@ for root in "${CANON[@]}"; do
   while IFS= read -r -d '' file; do printf '%s\n' "$file"; done < "$root_files" >> "$notes"
 done
 sort -o "$notes" "$notes"
+# Privacy screen (names, then text): held files never become rows.
+if [ -n "${NB_PRIVACY_FILE:-}" ]; then
+  /usr/bin/perl "$ROOT/bin/privacy.pl" filter < "$notes" > "$notes.kept" || { echo 'build-index: privacy screen failed' >&2; exit 2; }
+  mv -f -- "$notes.kept" "$notes"
+fi
 
 total=0
 while IFS= read -r f; do

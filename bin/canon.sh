@@ -68,6 +68,7 @@ PRUNE_DIRS=(
     -o -name .obsidian -o -name .planning -o -name .venv -o -name venv \
     -o -name __pycache__ -o -name .cache -o -name Library -o -name '*.app' \
     -o -name dist -o -name build -o -name .claude -o -name worktrees \
+    -o -name .ssh -o -name .gnupg -o -name .aws \
     -o -path "$NB_SELF/moc" -o -path "$NB_SELF/bin" -o -path "$NB_SELF/catalog" \
     -o -path '*/NewBrain/research' \) -prune \) -o
 )
@@ -78,6 +79,7 @@ PRUNE_FIND=(
   -not -path '*/__pycache__/*' -not -path '*/.cache/*' -not -path '*/Library/*'
   -not -path '*.app/*' -not -path '*/dist/*' -not -path '*/build/*'
   -not -path '*/.claude/*' -not -path '*/worktrees/*'         # per-project Claude scaffolding + git worktrees
+  -not -path '*/.ssh/*' -not -path '*/.gnupg/*' -not -path '*/.aws/*'   # credentials
   # EDIT: add your own app/game junk roots here, e.g.:
   # -not -path '*/SomeApp/*'
   # -not -path "$HOME/Desktop/Games/*"
@@ -94,6 +96,7 @@ PRUNE_RG=(
   --glob '!**/__pycache__/**' --glob '!**/.cache/**' --glob '!**/Library/**'
   --glob '!**/*.app/**' --glob '!**/dist/**' --glob '!**/build/**'
   --glob '!**/.claude/**' --glob '!**/worktrees/**'
+  --glob '!**/.ssh/**' --glob '!**/.gnupg/**' --glob '!**/.aws/**'
   # EDIT: add rg globs matching the junk roots you added to PRUNE_FIND above.
   # NOTE (measured): rg honors ONLY floating '**/NAME/**' component globs here —
   # absolute ("!$HOME/...") and multi-component anchored forms ("!**/Desktop/NewBrain/**") are

@@ -99,7 +99,7 @@ is_offloaded() { ls -lO "$1" 2>/dev/null | grep -q 'dataless'; }
 EXTRACT_TIMEOUT="${NB_EXTRACT_TIMEOUT:-120}"
 limit() { /usr/bin/perl -e 'alarm shift; exec @ARGV' "$EXTRACT_TIMEOUT" "$@"; }
 
-processed=0; extracted=0; keyword_only=0; skipped_fresh=0; failed=0; downloaded=0; evicted=0; titled_only=0
+held=0; processed=0; extracted=0; keyword_only=0; skipped_fresh=0; failed=0; downloaded=0; evicted=0; titled_only=0
 while IFS=$'\t' read -r path title themes keywords; do
   case "$path" in \#*|"") continue ;; esac
   case "$path" in *Resources/Sensitive/*) continue ;; esac   # hard-blocked set, defensive
@@ -179,6 +179,15 @@ while IFS=$'\t' read -r path title themes keywords; do
     failed=$((failed+1)); rm -f "$out"; printf '%s\textraction_failed\n' "$path" >> "$REPORT_TMP"; continue
   fi
 
+  # Privacy screen on the extracted text, before it can reach the index: a clear private pattern
+  # (IBAN, card, social security number, private key) puts the file on the held list instead.
+  if [ -n "${NB_PRIVACY_FILE:-}" ]; then
+    why="$(printf '%s' "$text" | /usr/bin/perl "$ROOT/bin/privacy.pl" content "$f")"
+    if [ -n "$why" ]; then
+      rm -f "$out"; held=$((held+1)); printf '%s\theld_private\n' "$path" >> "$REPORT_TMP"; continue
+    fi
+  fi
+
   if [ "$select_keywords_only" -eq 1 ]; then
     kw="$(derive_keywords "$text")"
     if [ -n "$kw" ]; then
@@ -230,6 +239,9 @@ if [ -s "$KWUP" ]; then
     { if (($1 in upd) && ($4=="-" || $4=="")) $4=upd[$1]; print }
   ' "$KWUP" "$INDEX" > "$INDEX.new" && mv "$INDEX.new" "$INDEX"
 fi
+
+# Held files leave the index rows too, so nothing downstream lists or reads them.
+if [ -n "${NB_PRIVACY_FILE:-}" ]; then /usr/bin/perl "$ROOT/bin/privacy.pl" prune-index "$INDEX"; fi
 
 echo "extract: processed=$processed  extracted=$extracted  keyword-only=$keyword_only  title-only(>${CAP}B)=$titled_only  offloaded-pulled=$downloaded  re-evicted=$evicted  skipped-fresh=$skipped_fresh  failed=$failed"
 echo "extracts in: ${EXDIR/#$HOME/~}  ($(ls "$EXDIR" 2>/dev/null | wc -l | tr -d ' ') files)"

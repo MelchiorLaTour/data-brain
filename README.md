@@ -7,13 +7,31 @@ terminal engine uses bash and sqlite FTS5 without a model call or network connec
 
 ## Download for Claude Desktop (macOS)
 
-**[Download databrain.mcpb (v0.1.5)](https://github.com/MelchiorLaTour/data-brain/releases/download/v0.1.5/databrain.mcpb)** — one file, no checksum or command needed.
+**What DataBrain will not read:**
 
-1. Download the file above to your Downloads folder.
-2. In Claude Desktop choose **Claude → Settings → Extensions → Advanced settings → Extension Developer → Install Extension…** and select `databrain.mcpb`.
-3. In the DataBrain extension settings, pick where DataBrain keeps its folder and which document folders it may search. Start a new chat and say **"Set up my DataBrain."**
+- Folders named `Resources/Sensitive`, `.git`, `node_modules`, `.obsidian`, `.ssh`, `.gnupg` and `.aws`, and any file that is not `.md`, `.txt`, `.pdf`, `.docx`, `.doc`, `.pages` or `.rtf`.
+- Names are checked first, then text is checked on your Mac. Nothing is sent.
+- Anything that looks private is held back until you say it is fine: taxes, bank, ID, medical, payslips, passwords, keys, contracts, in English and French, and any text with an IBAN, card number, social security number or private key.
+- Scanned images such as `IMG_2231.jpg` are not checked.
 
-Full step-by-step guide: [app guide](setup/docs/databrain-app-guide.html). Status: **pre-release**. Tested in Claude Desktop on one Mac with a small sample folder (install, setup, search, deleted files); large folders and surviving a restart are not yet tested. Details in the [acceptance ledger](setup/ACCEPTANCE.md). The terminal route for Claude Code remains available through [INSTALL.md](INSTALL.md).
+**Do this:**
+
+1 → Download **[databrain-0.1.6.mcpb](https://github.com/MelchiorLaTour/data-brain/releases/download/v0.1.6/databrain-0.1.6.mcpb)**.  
+2 → Open **Claude → Settings… → Extensions**. (**Extensions** is in the left list, under **This computer**.)  
+3 → Click **Advanced settings**.  
+4 → Click **Install extension**. (Bottom of the page, under **Extension developer**.)  
+5 → In the window that opens, click **databrain-0.1.6.mcpb**, then click **Open** at the bottom right. (It is in **Downloads**, in the left list. If your Mac added a number to the name, such as **databrain-0.1.6 (1).mcpb**, click that one.) [CHECK]  
+6 → Click **Install**. (The **Configure DataBrain** window opens next.)  
+7 → Under **Folders DataBrain may use**, click **Add directory** and pick **Desktop**. Do it again for **Documents**. Nothing gets moved. (Click **Add directory**. An empty row appears. Click the **folder icon** at the right end of that row. In the window that opens, click **Desktop** in the left list, then click **Open** at the bottom right. Click **Add directory** again and do the same with **Documents**. Leave **DataBrain folder location** as it is. To search other folders later, add them here the same way. If you close this window by mistake: **Claude → Settings… → Extensions → DataBrain → Configure**.) [CHECK]  
+8 → Click **Save**.  
+9 → You can delete the downloaded file now. (It is in your **Downloads** folder.)  
+10 → In a new chat, send this message: `Set up my DataBrain` (Claude may list files that look private and ask which are fine to index. If you are not sure, say **none**.)  
+11 → When your Mac asks to let Claude access your Desktop or Documents folder, click **OK** (or **Allow**). (It can appear while Claude sets up. Documents, Desktop, Downloads, iCloud Drive, and external drives each ask once.) [CHECK]  
+12 → When Claude says DataBrain is set up, send this message: `In DataBrain, what's in my [a file name from your Desktop]?`  
+
+That's all. DataBrain lives in your home folder: **Finder → Go → Home**. Same steps with copy buttons: [app guide](Mac%20download/Claude%20app/databrain-app-guide.html).
+
+Pre-release: tested on one Mac. The terminal route for Claude Code is in [INSTALL.md](INSTALL.md); test status is in the [acceptance ledger](setup/ACCEPTANCE.md).
 
 ## Compatibility
 

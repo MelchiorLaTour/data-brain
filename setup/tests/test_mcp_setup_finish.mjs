@@ -79,17 +79,59 @@ try {
   await fs.stat(path.join(dataHome, 'moc', 'relationships.tsv'));
   const finished = await call('databrain_setup_status');
   assert(!finished.includes('SETUP NOT FINISHED'), 'no banner once setup has moved past labeling');
-  // Settings NOT saved: the approval question stays.
-  const bare = spawn(process.execPath, [serverScript], { env: { ...process.env, HOME: path.join(temp, 'home') }, stdio: ['pipe', 'pipe', 'pipe'] });
-  try {
-    const bareReplies = new Map();
-    readline.createInterface({ input: bare.stdout }).on('line', line => { const m = JSON.parse(line); bareReplies.get(m.id)?.(m); });
-    const bareCall = (id, method, params) => new Promise(resolve => { bareReplies.set(id, resolve); bare.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });
-    await bareCall(1, 'initialize', { protocolVersion: '2025-03-26' });
-    const bareStatus = (await bareCall(2, 'tools/call', { name: 'databrain_setup_status', arguments: {} })).result.content[0].text;
+  // Progress shows a percentage while indexing (state and progress file faked on the finished brain).
+  const statePath = path.join(dataHome, '.databrain', 'desktop-state.json');
+  const savedState = await fs.readFile(statePath, 'utf8');
+  await fs.writeFile(statePath, JSON.stringify({ ...JSON.parse(savedState), stage: 'indexing' }));
+  await fs.writeFile(path.join(dataHome, 'moc', 'extract-progress.txt'), '1\n');
+  const progress = await call('databrain_setup_status');
+  assert(/Extracted about 1 of \d+ files \(\d+%, last update \d+ min ago\)/.test(progress), `progress line must carry a percentage: ${progress}`);
+  await fs.writeFile(statePath, savedState);
+  await fs.rm(path.join(dataHome, 'moc', 'extract-progress.txt'));
+
+  // Diagnostics: version, stage, counts, recent steps; no home path.
+  const manifest = JSON.parse(await fs.readFile(path.join(here, '../mcp/manifest.json'), 'utf8'));
+  const diagnostics = await call('databrain_diagnostics');
+  assert(diagnostics.includes(`Version: ${manifest.version}`) && diagnostics.includes('Stage: verification pending') && diagnostics.includes('Recent steps'), `diagnostics incomplete: ${diagnostics}`);
+  assert(!diagnostics.includes(path.join(temp, 'home')), 'diagnostics must show the home folder as ~');
+
+  // Other launch settings, each in its own server and HOME.
+  async function withServer(name, setup, args, run) {
+    const home = path.join(temp, name);
+    await fs.mkdir(home, { recursive: true });
+    await setup?.(home);
+    const child = spawn(process.execPath, [serverScript, ...args(home)], { env: { ...process.env, HOME: home }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const waiting = new Map();
+    readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
+    let n = 0;
+    const ask = (method, params) => new Promise(resolve => { const id = ++n; waiting.set(id, resolve); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });
+    const tool = async (toolName) => (await ask('tools/call', { name: toolName, arguments: {} })).result.content[0].text;
+    try { await ask('initialize', { protocolVersion: '2025-03-26' }); await run({ home, tool }); } finally { child.kill('SIGTERM'); }
+  }
+  // 1) no folder location set: DataBrain goes in the home folder by itself
+  await withServer('home-default', null, home => ['--databrain-source-roots', notes], async ({ home, tool }) => {
+    const before = await tool('databrain_setup_status');
+    assert(before.startsWith('SETUP NOT STARTED.') && before.includes(`DataBrain parent ${home}`), `default parent must be the home folder: ${before.slice(0, 300)}`);
+    await tool('databrain_setup_start');
+    await waitFor(async () => (await fs.stat(path.join(home, 'DataBrain', 'moc', 'index.tsv')).catch(() => null)) || null, 'index created under ~/DataBrain');
+  });
+  // 2) a DataBrain folder already exists there: left untouched, said plainly, no retry loop
+  await withServer('home-foreign', async home => {
+    await fs.mkdir(path.join(home, 'DataBrain'), { recursive: true });
+    await fs.writeFile(path.join(home, 'DataBrain', 'older-brain.txt'), 'not ours\n');
+  }, home => ['--databrain-source-roots', notes], async ({ home, tool }) => {
+    const status = await tool('databrain_setup_status');
+    assert(status.startsWith('SETUP BLOCKED.') && /already exists/.test(status) && /Settings/.test(status), `status must explain the existing folder: ${status.slice(0, 400)}`);
+    const started = await tool('databrain_setup_start');
+    assert(/already exists/.test(started) && /left it untouched/.test(started) && /different folder/.test(started), `setup start must say what happened and what to do: ${started}`);
+    assert.deepEqual(await fs.readdir(path.join(home, 'DataBrain')), ['older-brain.txt'], 'the existing folder must be left exactly as it was');
+  });
+  // 3) settings not saved at all: the approval question stays
+  await withServer('unsaved', null, () => [], async ({ tool }) => {
+    const bareStatus = await tool('databrain_setup_status');
     assert(!bareStatus.startsWith('SETUP NOT STARTED.') && /explicitly confirms/.test(bareStatus), `unsaved settings must keep the approval question: ${bareStatus}`);
-  } finally { bare.kill('SIGTERM'); }
-  console.log('PASS: pre-saved settings start setup with no question, status says when setup is unfinished, manual refresh prunes deleted files, and applying labels builds the relationship report itself');
+  });
+  console.log('PASS: setup defaults to ~/DataBrain, leaves an existing folder alone and says so, shows progress as a percentage, has diagnostics, pre-saved settings start setup with no question, status says when setup is unfinished, manual refresh prunes deleted files, and applying labels builds the relationship report itself');
 } catch (error) {
   throw new Error(`${error.message}${stderr ? `\nMCP stderr: ${stderr.slice(0, 1500)}` : ''}`);
 } finally {
