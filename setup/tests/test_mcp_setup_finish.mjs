@@ -126,6 +126,16 @@ try {
     assert(/already exists/.test(started) && /left it untouched/.test(started) && /different folder/.test(started), `setup start must say what happened and what to do: ${started}`);
     assert.deepEqual(await fs.readdir(path.join(home, 'DataBrain')), ['older-brain.txt'], 'the existing folder must be left exactly as it was');
   });
+  // 2b) the existing folder holds links (a project folder with a moc link): still "already exists", never "unreadable"
+  await withServer('home-foreign-links', async home => {
+    await fs.mkdir(path.join(home, 'DataBrain', 'elsewhere'), { recursive: true });
+    await fs.symlink(path.join(home, 'DataBrain', 'elsewhere'), path.join(home, 'DataBrain', 'moc'));
+  }, home => ['--databrain-source-roots', notes], async ({ home, tool }) => {
+    const status = await tool('databrain_setup_status');
+    assert(status.startsWith('SETUP BLOCKED.') && /already exists/.test(status) && !/unreadable/.test(status), `a folder with links must be explained as already existing: ${status.slice(0, 400)}`);
+    const started = await tool('databrain_setup_start');
+    assert(/already exists/.test(started) && !/unreadable/.test(started), `setup start must say it already exists: ${started}`);
+  });
   // 3) settings not saved at all: the approval question stays
   await withServer('unsaved', null, () => [], async ({ tool }) => {
     const bareStatus = await tool('databrain_setup_status');

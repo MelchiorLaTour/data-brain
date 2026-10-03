@@ -16,18 +16,21 @@ terminal engine uses bash and sqlite FTS5 without a model call or network connec
 
 **Do this:**
 
-1 → Download **[databrain-0.1.6.mcpb](https://github.com/MelchiorLaTour/data-brain/releases/download/v0.1.6/databrain-0.1.6.mcpb)**.  
+1 → Download **[databrain-0.1.7.mcpb](https://github.com/MelchiorLaTour/data-brain/releases/download/v0.1.7/databrain-0.1.7.mcpb)**.  
 2 → Open **Claude → Settings… → Extensions**. (**Extensions** is in the left list, under **This computer**.)  
 3 → Click **Advanced settings**.  
 4 → Click **Install extension**. (Bottom of the page, under **Extension developer**.)  
-5 → In the window that opens, click **databrain-0.1.6.mcpb**, then click **Open** at the bottom right. (It is in **Downloads**, in the left list. If your Mac added a number to the name, such as **databrain-0.1.6 (1).mcpb**, click that one.) [CHECK]  
+5 → In the window that opens, click **databrain-0.1.7.mcpb**, then click **Open** at the bottom right. (It is in **Downloads**, in the left list. If your Mac added a number to the name, such as **databrain-0.1.7 (1).mcpb**, click that one. If the next page says **Update** instead of **Install**, DataBrain was installed before and its old settings are still there: step 7 shows you how to clear them.) [CHECK]  
 6 → Click **Install**. (The **Configure DataBrain** window opens next.)  
-7 → Under **Folders DataBrain may use**, click **Add directory** and pick **Desktop**. Do it again for **Documents**. Nothing gets moved. (Click **Add directory**. An empty row appears. Click the **folder icon** at the right end of that row. In the window that opens, click **Desktop** in the left list, then click **Open** at the bottom right. Click **Add directory** again and do the same with **Documents**. Leave **DataBrain folder location** as it is. To search other folders later, add them here the same way. If you close this window by mistake: **Claude → Settings… → Extensions → DataBrain → Configure**.) [CHECK]  
-8 → Click **Save**.  
+7 → Under **Folders DataBrain may use**, click **Add directory** and pick **Desktop**. Do it again for **Documents**. Nothing gets moved. Add one more directory for every other top-level folder you want searched (see footnote 1). (Click **Add directory**. An empty row appears. Click the **folder icon** at the right end of that row. A Mac window opens. On its left, under **Favorites**, click **Desktop**, then click **Open** at the bottom right. Do the same with **Documents**, and with **Downloads** if you want it. A folder is not in the list? Click the house icon with your name on the left, double-click the folder, then click **Open**. Clear old settings: if **DataBrain folder location** shows a path, delete it so the box is empty, and remove any folder you do not want with its **X**. If you close the window by mistake: **Claude → Settings… → Extensions → DataBrain → Configure**.) [CHECK]  
+8 → Click the **Disabled** switch to turn DataBrain on, then click **Save**. (The switch is on the DataBrain page. It then reads **Enabled**.)  
 9 → You can delete the downloaded file now. (It is in your **Downloads** folder.)  
-10 → In a new chat, send this message: `Set up my DataBrain` (Claude may list files that look private and ask which are fine to index. If you are not sure, say **none**.)  
-11 → When your Mac asks to let Claude access your Desktop or Documents folder, click **OK** (or **Allow**). (It can appear while Claude sets up. Documents, Desktop, Downloads, iCloud Drive, and external drives each ask once.) [CHECK]  
-12 → When Claude says DataBrain is set up, send this message: `In DataBrain, what's in my [a file name from your Desktop]?`  
+10 → Check that DataBrain loaded. Close Settings completely, then open **Claude → Settings… → Extensions** again: **DataBrain** should be listed. Then open a new chat, click the **+** sign in the message box, click **Connectors**, and check that **DataBrain** is switched on. (You may need to scroll through your connectors.) [CHECK]  
+11 → In a new chat, send this message: `Set up my DataBrain` (Claude may list files that look private and ask which are fine to index. If you are not sure, say **none**. When Claude asks to use DataBrain, we recommend **Always allow**: people approve almost every permission prompt anyway, [Anthropic found 93% of prompts are approved](https://www.anthropic.com/engineering/claude-code-auto-mode). [CHECK])  
+12 → When your Mac asks to let Claude access your Desktop or Documents folder, click **OK** (or **Allow**). (It can appear while Claude sets up. Documents, Desktop, Downloads, iCloud Drive, and external drives each ask once.) [CHECK]  
+13 → When Claude says DataBrain is set up, send this message: `In DataBrain, what's in my [a file name from your Desktop]?`  
+
+**Footnote 1: which folders to add.** *For people who know computers:* adding a directory gives DataBrain read access to that folder and everything under it, including all subfolders. Add the top-level (parent) folders you want searched, such as the ones in your Finder **Favorites** list: **Desktop**, **Documents**, **Downloads**. You do not need to add their subfolders. Do not add your whole home folder: DataBrain refuses it. *Like you are five:* a folder is a box. A small box holds a few papers. A big box holds lots of little boxes. If you pick a big box, DataBrain looks inside all the little boxes in it too, so you do not have to pick each little box. But a big box like **Documents** has everything in it, even papers you may not want. If you only want one little box, pick just that one.
 
 That's all. DataBrain lives in your home folder: **Finder → Go → Home**. Same steps with copy buttons: [app guide](Mac%20download/Claude%20app/databrain-app-guide.html).
 

@@ -50,7 +50,7 @@ const indexWorkerRefresh = process.argv.includes('--databrain-run-index-refresh'
 const testRoots = process.env.DATABRAIN_TEST_SOURCE_ROOTS
   ? JSON.parse(process.env.DATABRAIN_TEST_SOURCE_ROOTS)
   : null;
-const SERVER_VERSION = '0.1.6';
+const SERVER_VERSION = '0.1.7';
 // No folder chosen in settings: DataBrain goes in the home folder (~/DataBrain), so nobody has to pick a location.
 const selectedParent = process.env.DATABRAIN_TEST_PARENT || launchSettings.parent || (codexMode || process.env.DATABRAIN_TEST_SELECTION_FILE ? null : os.homedir());
 const configuredRoots = testRoots || launchSettings.roots;
@@ -554,6 +554,9 @@ async function runIndexWorker() {
 async function readState() {
   if (!statePath) return {};
   try {
+    // No state file yet means setup has not started: report that first, so a folder that already exists
+    // (even one holding links) is explained as "already exists" instead of failing the safety check.
+    try { lstatSync(statePath); } catch (error) { if (error.code === 'ENOENT') return {}; throw error; }
     assertSafeDataHome();
     const stateInfo = lstatSync(statePath);
     if (!stateInfo.isFile() || stateInfo.isSymbolicLink()) throw new Error('The DataBrain setup state is not a regular local file.');
@@ -562,7 +565,7 @@ async function readState() {
     return state && typeof state === 'object' ? state : {};
   } catch (error) {
     if (error.code === 'ENOENT') return {};
-    throw new Error('The DataBrain setup state is unreadable; no source files were opened.');
+    throw new Error(`The DataBrain setup state is unreadable (${String(error.message || error.code).split(os.homedir()).join('~')}); no source files were opened.`);
   }
 }
 
