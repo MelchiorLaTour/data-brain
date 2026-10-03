@@ -7,10 +7,10 @@ terminal engine uses bash and sqlite FTS5 without a model call or network connec
 
 ## Download for Claude Desktop (macOS)
 
-**[Download databrain-0.1.6.mcpb (v0.1.6)](https://github.com/MelchiorLaTour/data-brain/releases/download/v0.1.6/databrain-0.1.6.mcpb)** — one file, no checksum or command needed.
+**[Download databrain-0.1.7.mcpb (v0.1.7)](https://github.com/MelchiorLaTour/data-brain/releases/download/v0.1.7/databrain-0.1.7.mcpb)** — one file, no checksum or command needed.
 
 1. Download the file above to your Downloads folder.
-2. In Claude Desktop choose **Claude → Settings → Extensions → Advanced settings → Extension Developer → Install Extension…** and select `databrain-0.1.6.mcpb`.
+2. In Claude Desktop choose **Claude → Settings → Extensions → Advanced settings → Extension Developer → Install Extension…** and select `databrain-0.1.7.mcpb`.
 3. In the DataBrain extension settings, pick where DataBrain keeps its folder and which document folders it may search. Start a new chat and say **"Set up my DataBrain."**
 
 Full step-by-step guide: [app guide](setup/docs/databrain-app-guide.html). Status: **pre-release**. Tested in Claude Desktop on one Mac with a small sample folder (install, setup, search, deleted files); large folders and surviving a restart are not yet tested. Details in the [acceptance ledger](setup/ACCEPTANCE.md). The terminal route for Claude Code remains available through [INSTALL.md](INSTALL.md).
