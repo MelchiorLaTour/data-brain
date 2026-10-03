@@ -292,3 +292,8 @@ shim contract, not a physical Windows installation.
   failure. Physical Claude install/restart/fresh-chat and live-release verification remain
   BLOCKED. Maintained PDFs remain review renders; Downloads copies are unchanged, and no commit,
   push, or publication was made.
+
+## Known issues
+
+- Intermittent: Codex category application once hit 'approved source changed during read' (1 of 8 suite runs, 2026-10-02); cause not yet found.
+- `test_mcp_data_route.mjs` is not wired into a runner and fails on main, branch and merged builds at later fixture checks; line 421 (unreadable file stays searchable) failed once in 6 runs (2026-10-03). Fix tracked separately.
