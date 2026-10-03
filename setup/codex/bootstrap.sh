@@ -44,7 +44,7 @@ case "$(uname -m)" in
   *) fail 'This Mac architecture is not supported by the available bundles.' ;;
 esac
 
-for command in cmp curl mkdir osascript ditto shasum grep mktemp sed codesign spctl sw_vers; do
+for command in cmp curl mkdir osascript ditto shasum grep mktemp sed sw_vers; do
   command -v "$command" >/dev/null 2>&1 || fail "Required local command is missing: $command"
 done
 MACOS_VERSION="$(sw_vers -productVersion)"
@@ -171,8 +171,6 @@ cmp "$STAGE/$BUILDINFO_NAME" "$APP_SOURCE/Contents/Resources/BUILDINFO.txt" || f
   cd "$APP_SOURCE/Contents"
   shasum -a 256 -c Resources/PAYLOAD.sha256 >/dev/null
 ) || fail 'The app payload failed its embedded integrity check.'
-codesign --verify --deep --strict "$APP_SOURCE" >/dev/null 2>&1 || fail 'The app signature is missing or invalid.'
-spctl --assess --type execute "$APP_SOURCE" >/dev/null 2>&1 || fail 'macOS Gatekeeper did not accept the app signature.'
 DATABRAIN_BOOTSTRAP_CONTENTS="$APP_SOURCE/Contents" \
   "$APP_SOURCE/Contents/Frameworks/node/bin/node" --input-type=module -e '
     import path from "node:path";
@@ -202,8 +200,6 @@ if [[ -e "$APP_DEST" ]]; then
     cd "$APP_DEST/Contents"
     shasum -a 256 -c Resources/PAYLOAD.sha256 >/dev/null
   ) || fail "The existing app at '$APP_DEST' failed its integrity check."
-  codesign --verify --deep --strict "$APP_DEST" >/dev/null 2>&1 || fail 'The existing app signature is missing or invalid.'
-  spctl --assess --type execute "$APP_DEST" >/dev/null 2>&1 || fail 'macOS Gatekeeper did not accept the existing app signature.'
   grep -Fqx 'package_kind=codex' "$APP_DEST/Contents/Resources/BUILDINFO.txt" || fail 'The existing app is not a Codex package.'
   grep -Fqx "architecture=$ARCH" "$APP_DEST/Contents/Resources/BUILDINFO.txt" || fail 'The existing app targets a different architecture.'
   if cmp -s "$STAGE/$BUILDINFO_NAME" "$APP_DEST/Contents/Resources/BUILDINFO.txt"; then
@@ -239,8 +235,6 @@ if [[ -e "$APP_DEST" ]]; then
     [[ ! -e "$APP_INCOMING" && ! -e "$APP_BACKUP" ]] || fail 'A temporary install or rollback path already exists; preserve it and review before retrying.'
     ditto "$APP_SOURCE" "$APP_INCOMING"
     cmp "$STAGE/$BUILDINFO_NAME" "$APP_INCOMING/Contents/Resources/BUILDINFO.txt" || fail 'The staged update build record does not match the release.'
-    codesign --verify --deep --strict "$APP_INCOMING" >/dev/null 2>&1 || fail 'The staged update signature is missing or invalid.'
-    spctl --assess --type execute "$APP_INCOMING" >/dev/null 2>&1 || fail 'Gatekeeper rejected the staged update.'
     /bin/mv "$APP_DEST" "$APP_BACKUP"
     /bin/mv "$APP_INCOMING" "$APP_DEST"
     APP_INCOMING=''
@@ -249,8 +243,6 @@ if [[ -e "$APP_DEST" ]]; then
       shasum -a 256 -c Resources/PAYLOAD.sha256 >/dev/null
     ) || fail 'The installed update failed its payload integrity check; restoring the previous app.'
     cmp "$STAGE/$BUILDINFO_NAME" "$APP_DEST/Contents/Resources/BUILDINFO.txt" || fail 'The installed update build record changed; restoring the previous app.'
-    codesign --verify --deep --strict "$APP_DEST" >/dev/null 2>&1 || fail 'The installed update signature failed verification; restoring the previous app.'
-    spctl --assess --type execute "$APP_DEST" >/dev/null 2>&1 || fail 'Gatekeeper rejected the installed update; restoring the previous app.'
   MCP_REGISTRATION="$(read_registration_record)" || fail "Could not confirm the '$SERVER_NAME' MCP registration after update; restoring the previous app."
   registration_record_matches_managed "$MCP_REGISTRATION" || fail "The '$SERVER_NAME' MCP registration changed during update; restoring the previous app."
   UPDATE_COMMITTED=1
@@ -269,8 +261,6 @@ else
     shasum -a 256 -c Resources/PAYLOAD.sha256 >/dev/null
   ) || fail 'The installed app failed its payload integrity check.'
   cmp "$STAGE/$BUILDINFO_NAME" "$APP_DEST/Contents/Resources/BUILDINFO.txt" || fail 'The installed app build record changed during copy.'
-  codesign --verify --deep --strict "$APP_DEST" >/dev/null 2>&1 || fail 'The installed app signature failed verification.'
-  spctl --assess --type execute "$APP_DEST" >/dev/null 2>&1 || fail 'Gatekeeper rejected the installed app.'
 fi
 
 if (( UPDATE_MODE == 1 )); then

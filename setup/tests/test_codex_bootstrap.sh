@@ -110,15 +110,13 @@ cat > "$TEST_ROOT/bin/codesign" <<'SH'
 #!/bin/bash
 exit 0
 SH
-cat > "$TEST_ROOT/bin/spctl" <<'SH'
+cat > "$TEST_ROOT/bin/shasum" <<'SH'
 #!/bin/bash
-set -euo pipefail
-target="${@: -1}"
-if [[ "${DATABRAIN_BOOTSTRAP_TEST_FAIL_INSTALLED:-}" == 1 && "$target" == "$HOME/Applications/DataBrain MCP.app" &&
-  -f "$target/Contents/Resources/BUILDINFO.txt" ]] && grep -Fqx 'package_version=1.2.5' "$target/Contents/Resources/BUILDINFO.txt"; then
+if [[ "${DATABRAIN_BOOTSTRAP_TEST_FAIL_INSTALLED:-}" == 1 && "$PWD" == */Applications/"DataBrain MCP.app"/Contents ]] &&
+  grep -Fqx 'package_version=1.2.5' Resources/BUILDINFO.txt 2>/dev/null; then
   exit 1
 fi
-exit 0
+exec /usr/bin/shasum "$@"
 SH
 cat > "$TEST_ROOT/bin/sw_vers" <<'SH'
 #!/bin/bash
@@ -126,10 +124,10 @@ printf '14.0.0\n'
 SH
 chmod 755 "$TEST_ROOT/bin/"*
 chmod 755 "$TEST_ROOT/home/Applications/Codex.app/Contents/Resources/codex"
-for command in curl osascript ditto codesign spctl sw_vers; do
+for command in curl osascript ditto codesign sw_vers; do
   ln -s "$TEST_ROOT/bin/$command" "$TEST_ROOT/bin-without-codex/$command"
 done
-for command in curl osascript ditto codesign spctl; do
+for command in curl osascript ditto codesign; do
   ln -s "$TEST_ROOT/bin/$command" "$TEST_ROOT/bin-old-macos/$command"
 done
 cat > "$TEST_ROOT/bin-old-macos/sw_vers" <<'SH'
@@ -250,7 +248,7 @@ grep -Fqx 'package_version=1.2.4' "$APP_DEST/Contents/Resources/BUILDINFO.txt"
 prepare_release 1.2.5
 export DATABRAIN_BOOTSTRAP_TEST_FAIL_INSTALLED=1
 if bash "$BOOTSTRAP" > /dev/null 2> "$TEST_ROOT/rollback.stderr"; then
-  echo 'FAIL: bootstrap accepted a failed post-install Gatekeeper check' >&2
+  echo 'FAIL: bootstrap accepted a failed post-install payload check' >&2
   exit 1
 fi
 grep -Fqx 'package_version=1.2.4' "$APP_DEST/Contents/Resources/BUILDINFO.txt"

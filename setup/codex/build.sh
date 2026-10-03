@@ -107,7 +107,7 @@ fetch_locked rg
 cp "$ROOT/LICENSE" "$RESOURCES/LICENSE"
 cp "$HERE/launch.sh" "$CONTENTS/MacOS/databrain-mcp"
 cp "$ROOT/setup/mcp/server.mjs" "$ROOT/setup/mcp/relationship-core.mjs" "$ROOT/setup/mcp/taxonomy-core.mjs" "$ROOT/setup/mcp/freshness-core.mjs" "$ROOT/setup/mcp/github-release-check.mjs" "$ROOT/setup/mcp/codex-state.mjs" "$ROOT/setup/mcp/package-identity.mjs" "$ROOT/setup/mcp/folder-picker.js" "$ROOT/setup/mcp/pdf-extract.js" "$RESOURCES/setup/mcp/"
-cp "$ROOT/bin/build-fts.sh" "$ROOT/bin/build-index.sh" "$ROOT/bin/canon.sh" "$ROOT/bin/extract.sh" "$ROOT/bin/fts.sh" "$ROOT/bin/index-add.sh" "$ROOT/bin/ingest-root.sh" "$ROOT/bin/inventory.sh" "$ROOT/bin/look.sh" "$ROOT/bin/relationships.sh" "$ROOT/bin/rebuild.sh" "$ROOT/bin/refresh.sh" "$ROOT/bin/search.sh" "$ROOT/bin/taxonomy.sh" "$RESOURCES/bin/"
+cp "$ROOT/bin/build-fts.sh" "$ROOT/bin/build-index.sh" "$ROOT/bin/canon.sh" "$ROOT/bin/extract.sh" "$ROOT/bin/fts.sh" "$ROOT/bin/index-add.sh" "$ROOT/bin/ingest-root.sh" "$ROOT/bin/inventory.sh" "$ROOT/bin/look.sh" "$ROOT/bin/relationships.sh" "$ROOT/bin/prune-missing.sh" "$ROOT/bin/rebuild.sh" "$ROOT/bin/refresh.sh" "$ROOT/bin/search.sh" "$ROOT/bin/taxonomy.sh" "$RESOURCES/bin/"
 chmod 755 "$CONTENTS/MacOS/databrain-mcp" "$CONTENTS/Frameworks/node/bin/node" "$RESOURCES/runtime/bin/rg"
 
 # ChatGPT desktop requires macOS 14; pinned Node v24.21.0 declares 13.5.0.

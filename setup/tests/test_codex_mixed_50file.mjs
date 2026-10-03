@@ -203,11 +203,9 @@ for fixture in fixtures:
   await call('databrain_apply_taxonomy', { assignments: categories.map(category => ({
     folder_id: ids.get(category.name).id, categories: [category.name],
   })) });
-  await waitForStatus(status => status.includes('Stage: relationships pending.')
+  const setupComplete = await waitForStatus(status => status.includes('Stage: verification pending.')
     && /taxonomy application: complete/.test(status), 'taxonomy application');
-  await call('databrain_build_relationships');
-  await waitForStatus(status => status.includes('Stage: verification pending.')
-    && /relationship report: complete/.test(status), 'relationship report');
+  assert.match(setupComplete, /Relationship report saved for 50 indexed rows/);
 
   const indexText = await fs.readFile(path.join(dataHome, 'moc', 'index.tsv'), 'utf8');
   const rows = indexText.split('\n').filter(line => line && !line.startsWith('#'))

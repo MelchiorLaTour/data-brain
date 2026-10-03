@@ -181,10 +181,14 @@ async function runMcpMode(mode) {
       { folder_id: ids.get('Projects'), categories: ['projects'] },
       { folder_id: ids.get('Research'), categories: ['research'] },
     ] });
-    await waitFor(client, status => status.includes('Stage: relationships pending.'), `${mode} taxonomy application`);
-    await client.call('databrain_build_relationships');
-    await waitFor(client, status => status.includes('Stage: verification pending.'), `${mode} relationship build`);
-    return { ...client, home, destination, proposals };
+    if (mode === 'codex') {
+      await waitFor(client, status => status.includes('Stage: verification pending.'), `${mode} automatic relationship build`);
+    } else {
+      await waitFor(client, status => status.includes('Stage: relationships pending.'), `${mode} taxonomy application`);
+      await client.call('databrain_build_relationships');
+      await waitFor(client, status => status.includes('Stage: verification pending.'), `${mode} relationship build`);
+    }
+    return { ...client, home, destination, proposals, mode };
   } catch (error) {
     client.server.kill('SIGTERM');
     throw error;
@@ -257,9 +261,13 @@ try {
     await client.call('databrain_apply_taxonomy', { assignments: [
       { folder_id: refreshedCandidates.get('Projects'), categories: ['projects'] },
     ] });
-    await waitFor(client, status => status.includes('Stage: relationships pending.'), 'post-refresh taxonomy');
-    await client.call('databrain_build_relationships');
-    await waitFor(client, status => status.includes('Stage: verification pending.'), 'post-refresh relationships');
+    if (client.mode === 'codex') {
+      await waitFor(client, status => status.includes('Stage: verification pending.'), 'post-refresh automatic relationships');
+    } else {
+      await waitFor(client, status => status.includes('Stage: relationships pending.'), 'post-refresh taxonomy');
+      await client.call('databrain_build_relationships');
+      await waitFor(client, status => status.includes('Stage: verification pending.'), 'post-refresh relationships');
+    }
     const result = await client.call('databrain_search', { query: 'handoff recovery warehouse fallback', limit: 10 });
     assert(rankedPaths(result).includes(path.relative(corpus, followup)), 'refreshed index must surface the newly added file');
     assert.match(await client.call('databrain_health'), /Source freshness: current\./);

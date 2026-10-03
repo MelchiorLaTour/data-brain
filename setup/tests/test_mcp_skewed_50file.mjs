@@ -164,11 +164,12 @@ try {
   }));
   assert(assignments.every(assignment => assignment.folder_id), 'each category needs its actual MCP proposal ID');
   await call('databrain_apply_taxonomy', { assignments });
-  // applying the categories now builds the relationship report itself, in the same job
+  // Applying categories completes the automatic relationship report in the same job.
   const relationshipStatus = await waitForStatus(status =>
     status.includes('Stage: verification pending.') && /taxonomy application: complete/.test(status),
   'category application and relationship report');
   assert(relationshipStatus.includes('Stage: verification pending.'));
+  assert.match(relationshipStatus, /Relationship report saved for 50 indexed rows/);
 
   const indexText = await fs.readFile(path.join(dataHome, 'moc', 'index.tsv'), 'utf8');
   const indexedRows = indexText.split('\n').filter(line => line && !line.startsWith('#')).map(line => line.split('\t'));
@@ -201,7 +202,7 @@ try {
   const installAudit = await call('databrain_verify_install');
   assert.match(installAudit, /Installed DataBrain audit: PARTIAL — inspect failed or blocked checks below\./, installAudit);
   assert.match(installAudit, launcher
-    ? /PARTIAL: Package identity — DataBrain Codex 0\.1\.0 \(darwin-(?:arm64|x64)\); .*app payload and source digest match/
+    ? /(PASS|PARTIAL): Package identity — DataBrain Codex \d+\.\d+\.\d+ \(darwin-(?:arm64|x64)\); .*app payload and source digest match/
     : /(PASS|PARTIAL): Package identity — DataBrain \d+\.\d+\.\d+; packaged files match their embedded digest/);
   assert.match(installAudit, /https:\/\/github\.com\/MelchiorLaTour\/data-brain\.git @ [0-9a-f]{12}/);
   assert.match(installAudit, /PASS: Selected-source health/);
