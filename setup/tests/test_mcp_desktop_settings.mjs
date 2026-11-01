@@ -175,12 +175,18 @@ try {
   const settingsMismatch = startServer(canonicalParent, [canonicalB, canonicalC]);
   try {
     await initialize(settingsMismatch);
-    const deniedSearch = await settingsMismatch.request('tools/call', { name: 'databrain_search', arguments: { query: 'retainedsettingsmarker' } });
-    assert(deniedSearch.result.content[0].text.includes('settings changed'), deniedSearch.result.content[0].text);
+    // The audit is read-only: it reports the drift and changes nothing.
+    const beforeAudit = await fs.readFile(path.join(canonicalParent, 'DataBrain', '.databrain', 'desktop-state.json'), 'utf8');
     const audit = await settingsMismatch.request('tools/call', { name: 'databrain_verify_install', arguments: {} });
     const auditText = audit.result.content[0].text;
     assert(auditText.includes('FAIL: Claude Desktop settings match'), auditText);
     assert(auditText.includes('do not exactly match the saved destination and grants'), auditText);
+    assert.equal(await fs.readFile(path.join(canonicalParent, 'DataBrain', '.databrain', 'desktop-state.json'), 'utf8'), beforeAudit, 'the drift audit must not change the saved state');
+    // The settings are the approval: the next tool call applies the new folder list by itself, with no reconcile step.
+    const allowedSearch = await settingsMismatch.request('tools/call', { name: 'databrain_search', arguments: { query: 'retainedsettingsmarker' } });
+    assert(!/settings changed|differ from the folders/.test(allowedSearch.result.content[0].text), allowedSearch.result.content[0].text);
+    const appliedState = JSON.parse(await fs.readFile(path.join(canonicalParent, 'DataBrain', '.databrain', 'desktop-state.json'), 'utf8'));
+    assert.deepEqual([...appliedState.roots].sort(), [canonicalB, canonicalC].sort(), 'the saved folder list must now match the settings');
   } finally {
     settingsMismatch.server.kill('SIGTERM');
     if (settingsMismatch.server.exitCode === null) await new Promise(resolve => settingsMismatch.server.once('exit', resolve));
@@ -259,9 +265,10 @@ try {
 
   const manifest = JSON.parse(await fs.readFile(path.join(here, '../mcp/manifest.json'), 'utf8'));
   const args = manifest.server.mcp_config.args;
-  assert.deepEqual(args.slice(1), ['--databrain-parent', '${user_config.data_parent}', '--databrain-source-roots', '${user_config.source_roots}']);
-  assert.equal(manifest.user_config.data_parent.type, 'directory');
-  assert.equal(manifest.user_config.data_parent.default, undefined);
+  assert.deepEqual(args.slice(1), ['--databrain-source-roots', '${user_config.source_roots}']);
+  // The settings screen shows only the folder list: no visible "folder location"; the brain goes in the home folder by itself.
+  assert.deepEqual(Object.keys(manifest.user_config), ['source_roots'], 'the settings screen must have no data_parent field');
+  assert(!JSON.stringify(manifest).includes('data_parent'), 'no data_parent anywhere in the manifest');
   assert.equal(manifest.user_config.source_roots.type, 'directory');
   assert.equal(manifest.user_config.source_roots.multiple, true);
   console.log('PASS: MCPB Desktop settings map to argv; setup consent gates creation/reads; repeated setup preserves state, grants, and sources; multiple roots persist; add preserves grants; audit reports drift without mutation; changed folder identity requires re-selection; removed settings roots are revoked before search/read.');

@@ -20,6 +20,15 @@ CANON=(
 # A local app adapter may provide an explicit, newline-delimited list of roots that the user
 # selected through the host's folder picker. Do not fall back to the defaults when that grant
 # file is missing, empty, or stale: that would silently widen scope to the machine's defaults.
+nb_is_applications_dir() {
+  case "$1" in /Applications|/System/Applications|"$HOME/Applications") return 0 ;; esac
+  if [ -n "${DATABRAIN_TEST_APP_DIRS:-}" ]; then
+    local dir old_ifs="$IFS"; IFS=:
+    for dir in $DATABRAIN_TEST_APP_DIRS; do [ -n "$dir" ] && [ "$1" = "$dir" ] && { IFS="$old_ifs"; return 0; }; done
+    IFS="$old_ifs"
+  fi
+  return 1
+}
 if [ -n "${NB_CANON_ROOTS_FILE:-}" ]; then
   [ -f "$NB_CANON_ROOTS_FILE" ] || { echo "canon: selected-root grant file is missing" >&2; exit 2; }
   CANON=()
@@ -44,6 +53,9 @@ if [ -n "${NB_CANON_ROOTS_FILE:-}" ]; then
         exit 2
         ;;
     esac
+    # An Applications folder in the grant means "read my apps" (Notes, Reminders: their content sits in the generated app-content folder),
+    # never "index the files lying in /Applications". Every walker (index, inventory, prune, freshness) skips it, so they always agree.
+    if nb_is_applications_dir "$selected_root"; then continue; fi
     CANON+=("$selected_root")
   done < "$NB_CANON_ROOTS_FILE"
   [ "${#CANON[@]}" -gt 0 ] || { echo "canon: selected-root grant file is empty" >&2; exit 2; }
@@ -68,9 +80,28 @@ PRUNE_DIRS=(
     -o -name .obsidian -o -name .planning -o -name .venv -o -name venv \
     -o -name __pycache__ -o -name .cache -o -name Library -o -name '*.app' \
     -o -name dist -o -name build -o -name .claude -o -name worktrees \
+    -o -name .ssh -o -name .gnupg -o -name .aws \
     -o -path "$NB_SELF/moc" -o -path "$NB_SELF/bin" -o -path "$NB_SELF/catalog" \
-    -o -path '*/NewBrain/research' \) -prune \) -o
+    -o -path '*/NewBrain/research' \
+    -o \( -name moc \( -exec test -e '{}/index.tsv' \; -o -exec test -e '{}/fts.db' \; \) \) \
+    -o \( \( -name moc -o -name app-content -o -name .databrain \) -exec test -e '{}/../.databrain/desktop-state.json' \; \) \) -prune \) -o
 )
+# A DataBrain's own generated folders can sit inside an approved source folder: moc/ (index, extracts, search database, room maps),
+# app-content/ (generated mirrors of Notes and Reminders) and .databrain/ (setup state, held file names, app item records). Their contents are
+# never indexed or searched: PRUNE_DIRS stops the walk at them, and nb_in_brain_moc answers the same question for a single path. A brain is
+# recognised by .databrain/desktop-state.json beside the folder, or (for moc/) by an index.tsv or fts.db inside it. Any other folder with one
+# of these names is an ordinary folder.
+nb_in_brain_moc() {
+  local d base
+  d="$(dirname -- "$1")"
+  while [ "$d" != "/" ] && [ "$d" != "." ] && [ -n "$d" ]; do
+    base="$(basename -- "$d")"
+    if [ "$base" = moc ] && { [ -e "$d/index.tsv" ] || [ -e "$d/fts.db" ]; }; then return 0; fi
+    case "$base" in moc|app-content|.databrain) [ -e "$(dirname -- "$d")/.databrain/desktop-state.json" ] && return 0 ;; esac
+    d="$(dirname -- "$d")"
+  done
+  return 1
+}
 PRUNE_FIND=(
   -not -path '*/Resources/Sensitive/*'
   -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/.obsidian/*'
@@ -78,6 +109,7 @@ PRUNE_FIND=(
   -not -path '*/__pycache__/*' -not -path '*/.cache/*' -not -path '*/Library/*'
   -not -path '*.app/*' -not -path '*/dist/*' -not -path '*/build/*'
   -not -path '*/.claude/*' -not -path '*/worktrees/*'         # per-project Claude scaffolding + git worktrees
+  -not -path '*/.ssh/*' -not -path '*/.gnupg/*' -not -path '*/.aws/*'   # credentials
   # EDIT: add your own app/game junk roots here, e.g.:
   # -not -path '*/SomeApp/*'
   # -not -path "$HOME/Desktop/Games/*"
@@ -94,6 +126,7 @@ PRUNE_RG=(
   --glob '!**/__pycache__/**' --glob '!**/.cache/**' --glob '!**/Library/**'
   --glob '!**/*.app/**' --glob '!**/dist/**' --glob '!**/build/**'
   --glob '!**/.claude/**' --glob '!**/worktrees/**'
+  --glob '!**/.ssh/**' --glob '!**/.gnupg/**' --glob '!**/.aws/**'
   # EDIT: add rg globs matching the junk roots you added to PRUNE_FIND above.
   # NOTE (measured): rg honors ONLY floating '**/NAME/**' component globs here —
   # absolute ("!$HOME/...") and multi-component anchored forms ("!**/Desktop/NewBrain/**") are
@@ -101,6 +134,21 @@ PRUNE_RG=(
   # equivalents in PRUNE_FIND are unaffected (find matches full absolute paths).
   --glob '!**/NewBrain/**'   # the brain's own bytes wholesale: no self-indexing; moc/extracted/ keeps its own dedicated pass in search.sh. EDIT if your clone dir isn't named NewBrain.
 )
+
+# Online-only ("dataless") files: stdin = newline-separated paths, stdout = those that live only in a cloud drive (iCloud, OneDrive,
+# Google Drive, Dropbox: Apple's File Provider marks them). Indexing never reads them, because reading downloads them. NB_TEST_DATALESS_LIST
+# (a file of paths) lets tests simulate them; real detection uses the same flag text as `ls -lO`.
+nb_dataless_paths() {
+  if [ -n "${NB_TEST_DATALESS_LIST:-}" ]; then grep -Fxf "$NB_TEST_DATALESS_LIST" 2>/dev/null || true; return 0; fi
+  tr '\n' '\0' | xargs -0 stat -f '%Sf%t%N' 2>/dev/null | awk -F'\t' '$1 ~ /dataless/ { print substr($0, length($1) + 2) }'
+}
+
+# One file: is it online-only (dataless) right now? Same rule as nb_dataless_paths (NB_TEST_DATALESS_LIST simulates it in tests). A file that was
+# indexed and LATER went online-only is never opened, never pruned as missing and never downloaded: its indexed text stays searchable.
+nb_is_dataless() {
+  if [ -n "${NB_TEST_DATALESS_LIST:-}" ]; then grep -Fxq -- "$1" "$NB_TEST_DATALESS_LIST" 2>/dev/null; return; fi
+  stat -f '%Sf' "$1" 2>/dev/null | grep -q dataless
+}
 
 # --- ARTIFACT IGNORE LIST ---
 # Files that would poison search if indexed (e.g. eval/exam files that quote test queries
@@ -119,7 +167,7 @@ ARTIFACTS=(
 is_artifact() {
   local p="$1" b a
   case "$p" in */NewBrain/research/*) return 0;; esac
-  b="$(basename "$p")"
+  b="${p##*/}"
   # ${ARTIFACTS[@]+...} guard: empty-array expansion is an unbound-variable error under
   # bash 3.2 (macOS default) when the sourcing script runs with set -u.
   for a in ${ARTIFACTS[@]+"${ARTIFACTS[@]}"}; do
@@ -195,6 +243,17 @@ is_approved_source_file() {
   is_approved_source_path "$candidate" && [ -f "$candidate" ] && [ ! -L "$candidate" ]
 }
 
+# Fingerprint (inode:size:mtime:ctime) of the file open on descriptor 9. On macOS the stat of /dev/fd/9 now and then answers "Bad file descriptor"
+# for a moment under load (about 4 in 12,000 with 8 parallel loops; the very next try answered every time, 32 of 32). An empty answer is not a
+# changed file, so ask up to 3 times; three empty answers still fail the comparison, as before.
+fd9_fingerprint() {
+  local out attempt
+  for attempt in 1 2 3; do
+    out="$(stat -f '%i:%z:%m:%c' /dev/fd/9 2>/dev/null)" && [ -n "$out" ] && { printf '%s' "$out"; return 0; }
+  done
+  return 1
+}
+
 # Copy a canonical regular file through a verified descriptor into a private temporary file.
 # Compare path, opened descriptor, and final path fingerprints so a swap cannot publish bytes.
 copy_verified_file() {
@@ -204,7 +263,7 @@ copy_verified_file() {
   before="$(stat -f '%i:%z:%m:%c' "$file" 2>/dev/null)" || return 2
   staged="$(mktemp "${TMPDIR:-/tmp}/databrain-verified.XXXXXX")" || return 2
   if ! exec 9<"$file"; then rm -f "$staged"; return 2; fi
-  opened="$(stat -f '%i:%z:%m:%c' /dev/fd/9 2>/dev/null || true)"
+  opened="$(fd9_fingerprint || true)"
   if [ "$opened" != "$before" ] || [ -L "$file" ]; then
     exec 9<&-
     rm -f "$staged"
@@ -215,7 +274,7 @@ copy_verified_file() {
     rm -f "$staged"
     return 2
   fi
-  after_fd="$(stat -f '%i:%z:%m:%c' /dev/fd/9 2>/dev/null || true)"
+  after_fd="$(fd9_fingerprint || true)"
   after_path="$(stat -f '%i:%z:%m:%c' "$file" 2>/dev/null || true)"
   exec 9<&-
   if [ "$opened" != "$after_fd" ] || [ "$opened" != "$after_path" ] || [ -L "$file" ] || \
@@ -246,7 +305,7 @@ read_approved_frontmatter() {
   [ -n "$before" ] || return 2
   tmp="$(mktemp "${TMPDIR:-/tmp}/databrain-frontmatter.XXXXXX")" || return 2
   if ! exec 9<"$file"; then rm -f "$tmp"; return 2; fi
-  opened="$(stat -f '%i:%z:%m:%c' /dev/fd/9 2>/dev/null || true)"
+  opened="$(fd9_fingerprint || true)"
   if [ "$opened" != "$before" ] || ! is_approved_source_file "$file"; then
     exec 9<&-
     rm -f "$tmp"
@@ -261,7 +320,7 @@ read_approved_frontmatter() {
       printf '%s\n' "$line" >> "$tmp"
     done
   fi
-  after_fd="$(stat -f '%i:%z:%m:%c' /dev/fd/9 2>/dev/null || true)"
+  after_fd="$(fd9_fingerprint || true)"
   after_path="$(stat -f '%i:%z:%m:%c' "$file" 2>/dev/null || true)"
   exec 9<&-
   if [ "$opened" != "$after_fd" ] || [ "$opened" != "$after_path" ] || \

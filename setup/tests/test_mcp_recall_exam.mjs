@@ -375,7 +375,7 @@ try {
     assert.equal(new Set(queries.map(query => query.toLowerCase())).size, queries.length, `duplicate query variants for ${row.id}`);
     const route = await call('databrain_abstain_check', { queries });
     assert.match(route, /Reading route only; not an answer or absence verdict/);
-    assert.match(route, /Read relevant evidence with databrain_read before answering or abstaining/);
+    assert.match(route, /CONVERGENT|DIVERGENT|MIXED|DRY/);   // the route label is a fact; reading the evidence first is written in the tool description
     const ranked = rankedPaths(route);
     const hit = row.expected.some(expected => ranked.includes(expected));
     const metric = variantCounts.get(row.stratum) ?? { hits: 0, total: 0 };
@@ -393,9 +393,9 @@ try {
     const ranked = rankedPaths(route);
     const exposed = ranked.length > 0;
     const dry = /DRY —/.test(route);
-    const readFirst = /Read relevant evidence with databrain_read before answering or abstaining/.test(route);
+    const readFirst = !dry && /CONVERGENT|DIVERGENT|MIXED/.test(route);
     trapResults.push({ kind: row.plausible ? 'plausible' : 'no-hit', exposed, dry, readFirst, ranked });
-    if (!row.plausible && (exposed || !dry || !/Do not answer from DataBrain/.test(route))) {
+    if (!row.plausible && (exposed || !dry || !/DataBrain found nothing on this\./.test(route))) {
       failures.push(`all-absent MCP variants did not remain DRY for ${row.id}: ${ranked.join(', ') || 'no candidates'}`);
     }
     if (row.plausible && (!exposed || dry || !readFirst || !/Reading route only; not an answer or absence verdict/.test(route))) {

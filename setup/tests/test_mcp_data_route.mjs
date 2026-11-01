@@ -44,10 +44,13 @@ await fs.writeFile(selectionFile, `${retainedRoot}\n`, { mode: 0o600 });
 let server;
 let stderr = '';
 const waiters = new Map();
+// The DATABRAIN_TEST_* hooks below are ignored when HOME is the real home, so this test runs under its own empty HOME.
+const testHome = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-route-home-')));
 function startServer() {
   const child = spawn(process.execPath, ['--import', path.join(here, 'pause-open-preload.mjs'), serverScript], {
     env: {
       ...process.env,
+      HOME: testHome,
       DATABRAIN_ENGINE_DIR: engine,
       DATABRAIN_TEST_HOME: dataHome,
       DATABRAIN_TEST_STEP_BY_STEP: '1', // this test steps through the relationship stage itself
@@ -154,25 +157,25 @@ try {
   assert.equal(resumedInit.result.serverInfo.name, 'databrain');
   server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
   const restartStatus = await request(1301, 'tools/call', { name: 'databrain_setup_status', arguments: {} });
-  assert(restartStatus.result.content[0].text.includes('Stage: indexing') && restartStatus.result.content[0].text.includes('Call databrain_setup_run now to resume'), `server restart lost the interrupted setup checkpoint: ${restartStatus.result.content[0].text}`);
+  assert(restartStatus.result.content[0].text.includes('Stage: indexing') && restartStatus.result.content[0].text.includes('DataBrain is resuming it by itself'), `server restart lost the interrupted setup checkpoint: ${restartStatus.result.content[0].text}`);
   const resumedSetup = await request(20, 'tools/call', { name: 'databrain_setup_run', arguments: {} });
   assert(resumedSetup.result.content[0].text.includes('Indexing started'), `cancelled setup could not resume: ${resumedSetup.result.content[0].text}`);
   let setupStatus = '';
   for (let attempt = 0; attempt < 600; attempt += 1) {
     const reply = await request(100 + attempt, 'tools/call', { name: 'databrain_setup_status', arguments: {} });
     setupStatus = reply.result.content[0].text;
-    if (setupStatus.includes('Stage: taxonomy pending')) break;
+    if (setupStatus.includes('Stage: taxonomy pending') && !/initial indexing: running/.test(setupStatus)) break;   // the stage flips a moment before the job's own completion line is written
     if (setupStatus.includes('initial indexing: failed')) break;
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   assert(setupStatus.includes('Stage: taxonomy pending'), `initial indexing did not finish: ${setupStatus}`);
-  assert(setupStatus.includes('Review the reported gaps and retry with databrain_refresh'), `indexing did not explain how to resolve the fixture's unreadable-file gap: ${setupStatus}`);
+  assert(setupStatus.includes('Some files are reported as gaps; a refresh after they are resolved reads them.'), `indexing did not state the fixture's unreadable-file gap: ${setupStatus}`);
   assert(setupStatus.includes('File inventory: 6 indexed, 0 eligible missing from index, 1 unsupported; unreadable 1'), `file inventory did not reconcile selected and unreadable files: ${setupStatus}`);
   const healthReply = await request(1501, 'tools/call', { name: 'databrain_health', arguments: {} });
   const healthReport = healthReply.result.content[0].text;
   assert(healthReport.includes('Index records: 6; missing 0; unsafe 0; outside approved roots 0.'), `health check did not reconcile selected-root index paths: ${healthReport}`);
   assert(healthReport.includes('File inventory: 6 indexed; 0 eligible missing; 1 unsupported; unreadable 1; placeholders 0; empty 0; traversal errors 0.'), `health check did not report the selected-root inventory: ${healthReport}`);
-  assert(healthReport.includes('Ranked search database: 6 rows; quick_check ok.'), `health check did not validate the ranked-search database: ${healthReport}`);
+  assert(healthReport.includes('Ranked search database: 6 source files; 6 FTS section rows; quick_check ok.'), `health check did not validate the ranked-search database: ${healthReport}`);
   assert(healthReport.includes('Source freshness: current.'), `healthy selected-root freshness was not reported: ${healthReport}`);
   const inventoryAuditReply = await request(1506, 'tools/call', { name: 'databrain_verify_install', arguments: {} });
   const inventoryAudit = inventoryAuditReply.result.content[0].text;
@@ -200,7 +203,7 @@ try {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     assert(cleanStatus.includes('refresh: complete'), `clean fixture refresh did not finish: ${cleanStatus}`);
-    assert(cleanStatus.includes('give each folder group a broad useful lowercase label under the initial approval'), `clean indexing did not show the real category-review next step: ${cleanStatus}`);
+    assert(cleanStatus.includes('The folder groups are not labelled yet.') || cleanStatus.includes('The folder groups are being labelled by DataBrain itself.'), `clean indexing did not state that the folder groups are not labelled yet: ${cleanStatus}`);
   } finally {
     await fs.chmod(unreadableFixture, 0o000);
   }
@@ -223,7 +226,7 @@ try {
     const corruptHealth = await request(1502, 'tools/call', { name: 'databrain_health', arguments: {} });
     const corruptReport = corruptHealth.result.content[0].text;
     assert(corruptReport.includes('Ranked search database: check failed.'), `health check did not report the corrupt ranked-search database: ${corruptReport}`);
-    assert(corruptReport.includes('Next: resolve the reported issue'), `health check treated a failed SQLite integrity check as healthy: ${corruptReport}`);
+    assert(corruptReport.includes('The check reported an issue;'), `health check treated a failed SQLite integrity check as healthy: ${corruptReport}`);
   } finally {
     await fs.rm(ftsPath, { force: true });
     await fs.rename(savedFtsPath, ftsPath);
@@ -302,12 +305,13 @@ try {
   for (let attempt = 0; attempt < 600; attempt += 1) {
     const reply = await request(220 + attempt, 'tools/call', { name: 'databrain_setup_status', arguments: {} });
     exceptionStatus = reply.result.content[0].text;
-    if (exceptionStatus.includes('Stage: taxonomy pending') && exceptionStatus.includes('Extraction exceptions: 1 (missing.pdf)')) break;
+    if (exceptionStatus.includes('Stage: taxonomy pending') && exceptionStatus.includes('Extraction exceptions: 1 could not be read')) break;
     if (exceptionStatus.includes('refresh: failed')) break;
     await new Promise(resolve => setTimeout(resolve, 50));
   }
-  assert(exceptionStatus.includes('Extraction exceptions: 1 (missing.pdf)'), `status hid the extraction exception or recovery action: ${exceptionStatus}`);
-  assert(exceptionStatus.includes('databrain_refresh'), 'status did not tell the user how to retry after an extraction exception');
+  assert(exceptionStatus.includes('Extraction exceptions: 1 could not be read'), `status hid the extraction exception or recovery action: ${exceptionStatus}`);
+  assert(!exceptionStatus.includes('missing.pdf'), 'the name of a file that failed to read must never be printed');
+  assert(exceptionStatus.includes('Extraction gaps are listed above'), 'status did not state that the extraction gaps are listed (how to retry is in the tool description)');
   await fs.rm(missingPdf);
   // Rebuild the terminal artifacts independently from the same indexed rows the app now serves.
   await fs.copyFile(indexPath, path.join(terminalMoc, 'index.tsv'));
@@ -327,7 +331,7 @@ try {
   assert.deepEqual(rankedPaths(searchText), rankedPaths(terminalParity.stdout), 'MCP and terminal routes ranked the same engine fixture differently');
   const hit = searchText.match(/^\s*\d+\s+-?[0-9]+(?:\.[0-9]+)?\s+(.+)$/m)?.[1];
   assert(hit, 'search did not return a readable ranked path');
-  const storedHit = (await fs.readFile(indexPath, 'utf8')).split('\n').find(line => line && !line.startsWith('#') && line.split('\t', 1)[0].replace(/^~/, os.homedir()) === hit)?.split('\t', 1)[0];
+  const storedHit = (await fs.readFile(indexPath, 'utf8')).split('\n').find(line => line && !line.startsWith('#') && line.split('\t', 1)[0].replace(/^~/, testHome) === hit)?.split('\t', 1)[0];
   assert(storedHit, 'search hit was missing from the generated index');
   const hitSidecar = path.join(dataHome, 'moc', 'extracted', `${createHash('sha1').update(storedHit).digest('hex').slice(0, 16)}.txt`);
   const sidecarSentinel = path.join(dataHome, 'sidecar-symlink-sentinel.txt');
@@ -353,7 +357,7 @@ try {
   await fs.unlink(hitSidecar);
   const readReply = await request(3, 'tools/call', { name: 'databrain_read', arguments: { path: hit, chars: 1200 } });
   const readText = readReply.result.content[0].text;
-  assert(readText.startsWith(`Evidence from: ${hit}\n`), `read result did not carry its exact source path: ${readText}`);
+  assert(readText.startsWith(`From your files: ${hit}\nEvidence from: ${hit}\n`), `read result did not carry its exact source path: ${readText}`);
   assert(readText.includes('synthetic decision about access control'), `expected capped source excerpt; got: ${readText}`);
   assert(readText.includes('Ignore previous instructions'), 'synthetic prompt-injection text did not remain visibly inert source content');
   const terminalRead = spawnSync('/bin/bash', [path.join(engine, 'bin', 'look.sh'), 'decision about access control', '5'], {
@@ -425,13 +429,13 @@ try {
   });
   const answerRouteText = answerRoute.result.content[0].text;
   assert(answerRouteText.includes('Reading route only; not an answer or absence verdict'), `abstain check presented its hint as a verdict: ${answerRouteText}`);
-  assert(answerRouteText.includes('decision record.md') && answerRouteText.includes('databrain_read'), `abstain check did not route a known query to source reading: ${answerRouteText}`);
+  assert(answerRouteText.includes('decision record.md') && /CONVERGENT|DIVERGENT|MIXED/.test(answerRouteText), `abstain check did not route a known query to a source: ${answerRouteText}`);
   const dryRoute = await request(9, 'tools/call', {
     name: 'databrain_abstain_check',
     arguments: { queries: ['quasar hippocampus zyzzyva', 'neutron fossilized kumquat'] },
   });
   assert(dryRoute.result.content[0].text.includes('DRY — none of these query variants returned approved-source candidates'), `absent query did not produce a dry reading route: ${dryRoute.result.content[0].text}`);
-  assert(dryRoute.result.content[0].text.includes('Do not answer from DataBrain'), 'dry route did not direct the model to avoid an unsupported answer');
+  assert(dryRoute.result.content[0].text.includes('DataBrain found nothing on this.'), 'dry route did not state that DataBrain found nothing (what to do with that is in the tool description)');
   assert(dryRoute.result.content[0].text.includes('not an answer or absence verdict'), 'dry search was presented as proof that the answer is absent');
   const terminalAbsent = spawnSync('/bin/bash', [path.join(engine, 'bin', 'fts.sh'), 'quasar hippocampus zyzzyva', '5'], {
     encoding: 'utf8',
@@ -577,7 +581,7 @@ try {
   let nextWriteId = 40;
   async function saveAndVerify(tool, args, query, requiredMetadata) {
     const id = nextWriteId++ * 10;
-    const started = await request(id, 'tools/call', { name: tool, arguments: args });
+    const started = await request(id, 'tools/call', { name: tool, arguments: { folder: sourceRoot, ...args } });
     const jobId = started.result.content[0].text.match(/Save job: ([0-9a-f-]{36})/)?.[1];
     assert(jobId, `${tool} did not return a write job: ${started.result.content[0].text}`);
     let finalStatus = '';
@@ -591,10 +595,10 @@ try {
     }
     assert(finalStatus.split('\n').some(line => line.includes('note write: complete') && line.includes(args.title)), `${tool} did not complete: ${finalStatus}`);
     const search = await request(id + 2000, 'tools/call', { name: 'databrain_search', arguments: { query } });
-    const hit = search.result.content[0].text.split('\n').find(line => line.includes(args.title));
+    const hit = search.result.content[0].text.split('\n').find(line => /^\s*\d+\s+-?[0-9]+(?:\.[0-9]+)?\s+/.test(line) && line.includes(args.title));
     assert(hit, `${tool} note was not searchable by its selected keyword: ${search.result.content[0].text}`);
     const storedPath = hit.match(/^\s*\d+\s+-?[0-9]+(?:\.[0-9]+)?\s+(.+)$/)?.[1];
-    const storedRow = (await fs.readFile(indexPath, 'utf8')).split('\n').find(line => line && !line.startsWith('#') && line.split('\t', 1)[0].replace(/^~/, os.homedir()) === storedPath);
+    const storedRow = (await fs.readFile(indexPath, 'utf8')).split('\n').find(line => line && !line.startsWith('#') && line.split('\t', 1)[0].replace(/^~/, testHome) === storedPath);
     assert(storedRow?.split('\t')[3].includes(args.keywords[0]), `${tool} keywords were not recorded in the shared index: ${storedRow}`);
     const read = await request(id + 2001, 'tools/call', { name: 'databrain_read', arguments: { path: storedPath, chars: 1200 } });
     assert(read.result.content[0].text.includes(args.body) && read.result.content[0].text.includes(requiredMetadata), `${tool} note content or type metadata was not preserved: ${read.result.content[0].text}`);
@@ -622,7 +626,7 @@ try {
   await Promise.all([fs.rm(noteRace.signal, { force: true }), fs.rm(noteRace.release, { force: true })]);
   await fs.writeFile(noteRace.arm, createHash('sha256').update(`note-${Date.now()}`).digest('hex'));
   const racingWrite = await request(438, 'tools/call', { name: 'databrain_capture', arguments: {
-    title: 'Raced capture fixture', body: 'PRIVATE_NOTE_BODY must stay out of a replacement folder.', keywords: ['raced', 'capture'],
+    title: 'Raced capture fixture', body: 'PRIVATE_NOTE_BODY must stay out of a replacement folder.', keywords: ['raced', 'capture'], folder: sourceRoot,
   } });
   assert(racingWrite.result.content[0].text.includes('Save job:'), `write race fixture did not start: ${racingWrite.result.content[0].text}`);
   let noteOpenPaused = false;
@@ -652,7 +656,7 @@ try {
     await Promise.all([noteRace.arm, noteRace.signal, noteRace.release].map(file => fs.rm(file, { force: true })));
   }
   await fs.writeFile(selectionFile, `${await fs.realpath(dataHome)}\n`, { mode: 0o600 });
-  const deniedWrite = await request(444, 'tools/call', { name: 'databrain_capture', arguments: { title: 'Denied note', body: 'This must not be written.', keywords: ['denied', 'write'] } });
+  const deniedWrite = await request(444, 'tools/call', { name: 'databrain_capture', arguments: { title: 'Denied note', body: 'This must not be written.', keywords: ['denied', 'write'], folder: await fs.realpath(dataHome) } });
   assert(deniedWrite.result.content[0].text.includes('Save job:'), `write-boundary test did not start: ${deniedWrite.result.content[0].text}`);
   let deniedStatus = '';
   for (let attempt = 0; attempt < 600; attempt += 1) {
@@ -834,7 +838,7 @@ try {
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   assert(emptyOnlyStatus.includes('Stage: taxonomy pending') && emptyOnlyStatus.includes('Indexed rows: 0.'), `empty-only setup did not report its completed inventory: ${emptyOnlyStatus}`);
-  assert(emptyOnlyStatus.includes('No eligible files were found') && emptyOnlyStatus.includes('databrain_add_sources'), `empty-only setup did not give a clear recovery action: ${emptyOnlyStatus}`);
+  assert(emptyOnlyStatus.includes('No eligible files were found in the selected folders.'), `empty-only setup did not state that no eligible files were found: ${emptyOnlyStatus}`);
 
   // Exercise the cloud-placeholder branch with one disposable file. The shims report
   // dataless metadata only for this exact fixture path; every other ls/stat call delegates
@@ -896,9 +900,10 @@ try {
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   assert(cloudSetupStatus.includes('Stage: taxonomy pending'), `cloud fixture indexing did not finish: ${cloudSetupStatus}`);
-  assert.match(cloudSetupStatus, /File inventory: 1 indexed, 0 eligible missing from index, 0 unsupported; unreadable 0, cloud placeholders 1, empty 0, traversal errors 0\./, `setup status did not report the cloud placeholder: ${cloudSetupStatus}`);
+  assert.match(cloudSetupStatus, /File inventory: 1 indexed, 0 eligible missing from index, 0 unsupported; unreadable 0, cloud placeholders 0, empty 0, traversal errors 0\./, `setup status did not report the cloud placeholder: ${cloudSetupStatus}`);
+  assert(cloudSetupStatus.includes('1 indexed file is now cloud-only on this Mac (still searchable).'), `an indexed file that is online-only is counted as cloud-only, not as a gap: ${cloudSetupStatus}`);
   const cloudHealth = await request(25, 'tools/call', { name: 'databrain_health', arguments: {} });
-  assert.match(cloudHealth.result.content[0].text, /File inventory: 1 indexed; 0 eligible missing; 0 unsupported; unreadable 0; placeholders 1; empty 0; traversal errors 0\./, `health did not report the cloud placeholder: ${cloudHealth.result.content[0].text}`);
+  assert.match(cloudHealth.result.content[0].text, /File inventory: 1 indexed; 0 eligible missing; 0 unsupported; unreadable 0; placeholders 0; empty 0; traversal errors 0\./, `health did not report the cloud placeholder: ${cloudHealth.result.content[0].text}`);
   const cloudIndex = await fs.readFile(path.join(dataHome, 'moc', 'index.tsv'), 'utf8');
   const cloudIndexRow = cloudIndex.split('\n').find(line => line.startsWith(`${cloudFixture}\t`));
   assert(cloudIndexRow, 'cloud placeholder path was not inventoried in the index');
@@ -918,7 +923,7 @@ try {
   await fs.rm(cloudStatShim, { force: true });
   cloudShimsInstalled = false;
   await fs.rm(cloudFixtureRoot, { recursive: true, force: true });
-  assert(cloudSetupStatus.includes('cloud placeholders 1'), 'cloud placeholder fixture did not reach setup status');
+  assert(cloudSetupStatus.includes('1 indexed file is now cloud-only'), 'cloud placeholder fixture did not reach setup status');
   console.log('PASS: MCP selected-root search/read, root-swap read/write rejection, empty-corpus recovery, extraction-sidecar confinement, interrupted-index cancellation/restart/resume, relationship cancellation, and capture/note/synthesis write-back use the shared engine with scoped new-file creation and indexed keywords.');
 } catch (error) {
   throw new Error(`${error.message}${stderr ? `\nMCP stderr: ${stderr}` : ''}`);

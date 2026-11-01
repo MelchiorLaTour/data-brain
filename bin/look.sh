@@ -40,7 +40,7 @@ resolve_body() {
     return 0
   fi
   # step 2: local md/txt body
-  case "$f" in *.md|*.markdown|*.txt) ;; *) return 1 ;; esac
+  case "$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')" in *.md|*.markdown|*.txt) ;; *) return 1 ;; esac
   if [ -f "$f" ] && [ -r "$f" ] && ! ls -lO "$f" 2>/dev/null | grep -q 'dataless'; then
     cat "$f"; return 0
   fi

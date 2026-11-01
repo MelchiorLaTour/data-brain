@@ -32,9 +32,23 @@ title="$(basename "$F" ".$ext" | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2} //')"
 # Serialize concurrent additions and replace the index atomically. Never follow a swapped
 # index symlink, and leave the previous index intact if staging fails.
 lock="$INDEX.lock"
-if ! mkdir "$lock" 2>/dev/null; then echo 'index-add: another index update is in progress' >&2; exit 1; fi
+if ! mkdir "$lock" 2>/dev/null; then
+  # A lock left by a killed run, a crash or a reboot must not block every later write. It is stale when its owner is gone,
+  # when it was made before the last boot (a reused PID cannot fool that), or when it is older than 10 minutes.
+  owner="$(cat "$lock/pid" 2>/dev/null || true)"
+  made="$(stat -f %m "$lock" 2>/dev/null || echo 0)"
+  now="$(date +%s)"
+  boot="$(sysctl -n kern.boottime 2>/dev/null | sed -n 's/.*sec = \([0-9]*\).*/\1/p')"
+  stale=0
+  if [ "$made" -lt "${boot:-0}" ] || [ $(( now - made )) -ge 600 ]; then stale=1
+  elif [ -n "$owner" ]; then kill -0 "$owner" 2>/dev/null || stale=1
+  elif [ $(( now - made )) -ge 10 ]; then stale=1; fi   # no PID yet: its maker is still starting, unless this is old
+  if [ "$stale" -eq 1 ]; then rm -rf "$lock"; fi
+  if [ "$stale" -ne 1 ] || ! mkdir "$lock" 2>/dev/null; then echo 'index-add: another index update is in progress' >&2; exit 1; fi
+fi
+printf '%s\n' "$$" > "$lock/pid" 2>/dev/null || true
 tmp=''
-cleanup() { [ -n "$tmp" ] && rm -f "$tmp" || true; rmdir "$lock" 2>/dev/null || true; }
+cleanup() { [ -n "$tmp" ] && rm -f "$tmp" || true; rm -rf "$lock" 2>/dev/null || true; }
 trap cleanup EXIT HUP INT TERM
 tmp="$(mktemp "$MOC/.index-add.XXXXXX")"
 [ -f "$INDEX" ] && [ ! -L "$INDEX" ] || { echo 'index-add: index changed or became a symbolic link' >&2; exit 1; }

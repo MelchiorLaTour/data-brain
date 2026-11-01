@@ -82,7 +82,7 @@ rows_after="$(grep -vc '^#' "$moc/index.tsv")"
 [ "$rows_after" = "$((rows_before - 3))" ] || fail "prune must drop the 3 rows of the deleted folder, not $((rows_before - rows_after))"
 grep -q notaroot "$moc/index.tsv" || fail "a row outside the selected roots must not be pruned"
 grep -q '/a/n2.md' "$moc/index.tsv" || fail "a row whose file still exists must be kept"
-if grep -q 'b/n' "$moc/index.tsv"; then fail "rows of the deleted folder remain"; fi
+if grep -qF "$src/b/n" "$moc/index.tsv"; then fail "rows of the deleted folder remain"; fi   # the full path: a bare 'b/n' also matched ...b/notaroot when the random temp name ended in b
 # a selected root that is unavailable (unplugged volume, renamed folder) must cost no rows
 mv "$src" "$SCRATCH/src-moved"
 rows_kept="$(grep -vc '^#' "$moc/index.tsv")"

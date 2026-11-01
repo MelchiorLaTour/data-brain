@@ -13,6 +13,12 @@ tmpd="$(mktemp -d)"; trap 'rm -rf "$tmpd"' EXIT
 files="$tmpd/files"; errors="$tmpd/find-errors"; indexed="$tmpd/indexed"
 : > "$files"; : > "$errors"
 cut -f1 "$INDEX" | sort -u > "$indexed"
+# Files held back for privacy review are not gaps: list them apart from the missing ones.
+withheld="$tmpd/withheld"; : > "$withheld"
+if [ -n "${NB_PRIVACY_FILE:-}" ] && [ -f "$NB_PRIVACY_FILE" ]; then
+  awk -F'\t' '{ s[$2]=$1 } END { for (p in s) if (s[p]=="held" || s[p]=="excluded") print p }' "$NB_PRIVACY_FILE" \
+    | sed "s#^$HOME#~#" | sort -u > "$withheld"
+fi
 root_files="$tmpd/root-files"
 for root in "${CANON[@]}"; do
   [ -d "$root" ] || { printf '%s\n' "$root: unavailable" >> "$errors"; continue; }
@@ -30,6 +36,7 @@ while IFS= read -r -d '' file; do
   base="${file##*/}"
   ext="${base##*.}"
   case "$base" in *.*) ;; *) ext='' ;; esac
+  ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
   case "$ext" in
     md|txt|pdf|docx|doc|pages|rtf) index_status='eligible' ;;
     *) index_status='unsupported' ;;
@@ -37,10 +44,12 @@ while IFS= read -r -d '' file; do
   if [ "$index_status" = unsupported ]; then
     content_status='not_applicable'
   else
-    grep -Fxq "$canonical" "$indexed" && index_status='indexed' || index_status='missing_index'
+    if grep -Fxq "$canonical" "$indexed"; then index_status='indexed'
+    elif [ -s "$withheld" ] && grep -Fxq "$canonical" "$withheld"; then index_status='withheld'
+    else index_status='missing_index'; fi
     if [ ! -r "$file" ]; then
       content_status='unreadable'
-    elif ls -lO "$file" 2>/dev/null | grep -q 'dataless'; then
+    elif nb_is_dataless "$file"; then
       content_status='cloud_placeholder'
     elif [ ! -s "$file" ]; then
       content_status='empty'

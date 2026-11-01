@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+process.env.DATABRAIN_TEST_NO_AUTO_LABELS = '1';   // this test walks the manual labelling steps; test_mcp_auto_labels.mjs covers the automatic finish
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverScript = process.env.DATABRAIN_SERVER || path.join(here, '../mcp/server.mjs');
@@ -51,6 +52,14 @@ async function waitFor(check, label, limitMs = 90000) {
 const idle = async () => !(await call('databrain_setup_status')).includes('refresh: running') || null;
 const stageIs = stage => async () => (await call('databrain_setup_status')).includes(`Stage: ${stage}`) || null;
 const indexPath = path.join(dataHome, 'moc', 'index.tsv');
+// A 1.5 s cap on the first answer (0.1.45): on a loaded Mac the answer can be the "being added" sentence instead of the change. Accept either;
+// after the sentence the change must show up in a later search (polled up to 30 s). Each check logs which branch it took.
+const foundNow = async (label, query, text, needle) => {
+  if (text.includes(needle)) { console.log(`BRANCH ${label}: same answer`); return; }
+  assert(/New changes are being added/.test(text), `${label}: the first answer must contain ${needle} or say changes are being added: ${text}`);
+  await waitFor(async () => (await call('databrain_search', { query })).includes(needle) || null, `${label}: ${needle} found by a later search`, 30000);
+  console.log(`BRANCH ${label}: sentence, then found by a later search`);
+};
 const indexRows = async () => (await fs.readFile(indexPath, 'utf8')).split('\n').filter(line => line && !line.startsWith('#'));
 
 try {
@@ -67,14 +76,16 @@ try {
   const baseline = await call('databrain_search', { query: 'zephyrquill' });
   assert(baseline.includes('codename.md') && !baseline.includes('Freshness:'), 'no note when nothing changed');
 
-  // added file: the answer comes back at once from the current index, with the count, then it is found
+  // added file: the change is indexed FIRST, so the first answer normally has it. On a loaded Mac the 1.5 s wait can run out (0.1.45):
+  // then the first answer says "New changes are being added" and the very next searches (up to 30 s) must contain the file.
   await sleep(700);
   await fs.writeFile(path.join(notes, 'added.md'), '# Added\nThe quillfern prototype uses a brass hinge.\n');
   const first = await call('databrain_search', { query: 'quillfern' });
-  assert(!first.includes('added.md'), 'the first answer comes from the previous index');
-  assert(/Freshness: 1 file changed since the last index \(1 added\)\. Refreshing in the background/.test(first), `expected a change note, got: ${first}`);
-  // an edit made WHILE that refresh runs must not be lost: it is flagged and picked up by the next pass
+  await foundNow('added', 'quillfern', first, 'added.md');
+  // a second edit right after: found in the very next answer too
+  await sleep(700);
   await fs.writeFile(path.join(notes, 'added.md'), '# Added\nThe quillfern prototype uses a brass hinge. Later edit: lateword.\n');
+  await foundNow('edit', 'lateword', await call('databrain_search', { query: 'lateword' }), 'added.md');
   await waitFor(idle, 'refresh idle');
   await waitFor(async () => (await call('databrain_search', { query: 'lateword' })).includes('added.md') || null, 'mid-refresh edit found by the next pass');
   await waitFor(idle, 'second refresh idle');
@@ -88,8 +99,7 @@ try {
   await sleep(700);
   await fs.writeFile(path.join(notes, 'added.md'), '# Added\nNow it mentions a marigold gasket.\n');
   const changed = await call('databrain_search', { query: 'marigold' });
-  assert(/\(1 changed\)/.test(changed), `expected a changed note, got: ${changed}`);
-  await waitFor(async () => (await call('databrain_search', { query: 'marigold' })).includes('added.md') || null, 'changed content found');
+  await foundNow('changed', 'marigold', changed, 'added.md');
   await waitFor(idle, 'refresh idle after change');
 
   // deleted file: never returned, and its index row is pruned by the refresh
@@ -98,8 +108,8 @@ try {
   const rowsBefore = (await indexRows()).length;
   const deleted = await call('databrain_search', { query: 'zephyrquill' });
   assert(!deleted.includes('codename.md'), 'a deleted file must not be returned');
-  assert(/\(1 deleted\)/.test(deleted), `expected a deleted note, got: ${deleted}`);
-  await waitFor(async () => (await indexRows()).length < rowsBefore || null, 'deleted row pruned');
+  if (/New changes are being added/.test(deleted)) { await waitFor(async () => (await indexRows()).length < rowsBefore || null, 'the deleted row pruned after the sentence', 30000); console.log('BRANCH deleted-row: sentence, then pruned'); }
+  else { assert((await indexRows()).length < rowsBefore, 'the deleted row is pruned before the answer'); console.log('BRANCH deleted-row: pruned before the answer'); }
   await waitFor(async () => (await call('databrain_health')).includes('Source freshness: current.') || null, 'freshness current');
   assert(!(await indexRows()).some(line => line.includes('codename.md')), 'the deleted file row must be pruned from the index');
   const gone = await call('databrain_search', { query: 'zephyrquill' });
@@ -107,7 +117,7 @@ try {
 
   // the sources were only read
   assert.equal(await fs.readFile(path.join(notes, 'garden.md'), 'utf8'), '# Garden\nTomatoes need staking in June.\n');
-  console.log('PASS: search answers from the current index, reports how many files changed, refreshes in the background, and finds added/changed files and drops deleted ones without touching the setup stage.');
+  console.log('PASS: when a tool is called, changed files are indexed first and the first answer already has them (added, edited, deleted), without touching the setup stage.');
 } catch (error) {
   throw new Error(`${error.message}${stderr ? `\nMCP stderr: ${stderr.slice(0, 1500)}` : ''}`);
 } finally {

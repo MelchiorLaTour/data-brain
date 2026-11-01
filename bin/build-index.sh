@@ -32,10 +32,22 @@ for root in "${CANON[@]}"; do
   while IFS= read -r -d '' file; do printf '%s\n' "$file"; done < "$root_files" >> "$notes"
 done
 sort -o "$notes" "$notes"
+# Online-only cloud files are not read during indexing (databrain_cloud_fetch handles them).
+nb_dataless_paths < "$notes" | sort > "$notes.cloud"
+if [ -s "$notes.cloud" ]; then comm -23 "$notes" "$notes.cloud" > "$notes.local"; mv -f -- "$notes.local" "$notes"; fi
+rm -f "$notes.cloud"
+# Privacy screen (names, then text): held files never become rows.
+if [ -n "${NB_PRIVACY_FILE:-}" ]; then
+  /usr/bin/perl "$ROOT/bin/privacy.pl" filter < "$notes" > "$notes.kept" || { echo 'build-index: privacy screen failed' >&2; exit 2; }
+  mv -f -- "$notes.kept" "$notes"
+fi
 
 total=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
+  # A file this Mac will not let us read (permission, or gone since the walk) is left out of the index, not fatal: the inventory
+  # reports it as unreadable. Only a file that changed identity while being read (below) still stops the run.
+  [ -r "$f" ] || continue
   total=$((total + 1))
   title="$(basename "$f" .md | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2} //')"
   canon="${f/#$HOME/~}"

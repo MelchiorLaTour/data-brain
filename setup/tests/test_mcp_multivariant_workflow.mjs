@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
+process.env.DATABRAIN_TEST_NO_AUTO_LABELS = '1';   // this test walks the manual labelling steps; test_mcp_auto_labels.mjs covers the automatic finish
 
 const [engine] = process.argv.slice(2);
 assert(engine, 'usage: test_mcp_multivariant_workflow.mjs PACKAGED_ENGINE_DIRECTORY');
@@ -132,7 +133,7 @@ try {
   const knownPaths = hitPaths(knownRoute);
   const knownHit = knownPaths.find(hit => path.basename(hit) === path.basename(target));
   assert(knownHit, `multi-variant route omitted the answer-bearing source: ${knownRoute}`);
-  assert.match(knownRoute, /Read relevant evidence with databrain_read before answering or abstaining/);
+  assert.match(knownRoute, /CONVERGENT|DIVERGENT|MIXED/);   // the route label is a fact; reading the evidence first is written in the tool description
 
   const excerpt = await call('databrain_read', { path: knownHit });
   assert.match(excerpt, /contact the on-call engineer first/i, excerpt);
@@ -144,7 +145,7 @@ try {
     queries: ['quartz lemur telescope', 'violet turnip meteorology'],
   });
   assert.match(absentRoute, /DRY — none of these query variants returned approved-source candidates/);
-  assert.match(absentRoute, /Do not answer from DataBrain/);
+  assert.match(absentRoute, /DataBrain found nothing on this\./);
   assert.match(absentRoute, /not an answer or absence verdict/);
 
   // A plausible but non-answering result must lead to reading, not an automatic
@@ -160,7 +161,7 @@ try {
   assert.match(trapExcerpt, /Evidence from:/);
   assert.match(trapExcerpt, /routine system questions/i);
   assert.doesNotMatch(trapExcerpt, /on-call engineer first/i, 'the plausible candidate is intentionally not answer-bearing');
-  assert.match(trapRoute, /Read relevant evidence with databrain_read/);
+  assert.match(trapRoute, /CONVERGENT|DIVERGENT|MIXED/);
   process.stdout.write([
     'PASS: real packaged MCP multi-variant call surfaced the synthetic answer-bearing source and databrain_read returned its excerpt.',
     'PASS: all-absent variants produced an explicit DRY route; a plausible candidate remained a read-first route.',

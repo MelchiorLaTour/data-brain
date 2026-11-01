@@ -10,6 +10,8 @@
 # index.tsv (NewBrain's own file). The real files are untouched.
 #
 # Usage:  bin/ingest-root.sh "/absolute/root"
+#         bin/ingest-root.sh "/absolute/root" --paths FILE   # only the files listed in FILE (absolute, one per line), no walk of the folder.
+#                                                            # Same rules as the walk: type, prune list, approved source, cloud, privacy.
 #   The root must ALSO be added to canon.sh CANON[] so search.sh's full-text rg covers it.
 #   After ingest + canon.sh edit, rerun bin/rebuild.sh to redraw the room MOCs.
 set -uo pipefail
@@ -18,8 +20,9 @@ source "$ROOT/bin/canon.sh"
 MOC="${NB_MOC_DIR:-$ROOT/moc}"
 INDEX="$MOC/index.tsv"
 
-SRC="${1:-}"
-[ -n "$SRC" ] && [ -d "$SRC" ] || { echo "usage: ingest-root.sh <existing-dir>" >&2; exit 1; }
+SRC="${1:-}"; LISTED=""
+if [ "${2:-}" = "--paths" ]; then LISTED="${3:-}"; [ -f "$LISTED" ] || { echo "ingest-root: --paths file not found" >&2; exit 1; }; fi
+[ -n "$SRC" ] && [ -d "$SRC" ] || { echo "usage: ingest-root.sh <existing-dir> [--paths FILE]" >&2; exit 1; }
 [ -s "$INDEX" ] || { echo "error: $INDEX missing/empty (run build-index.sh once first)" >&2; exit 1; }
 
 # Machinery / app+game-data / Sensitive pruning lives in canon.sh (PRUNE_FIND), the single shared
@@ -35,22 +38,62 @@ cut -f1 "$INDEX" | sed "s#^~#$HOME#" | sort -u > "$existing"
 # Note-like file types only. Images are intentionally EXCLUDED here (a screenshot is not a note;
 # add image ingest deliberately if you want it). Forbidden directories are pruned before traversal
 # by canon.sh PRUNE_DIRS; PRUNE_FIND applies the remaining file/path exclusions.
+if [ -n "$LISTED" ]; then
+  # Listed files only: each must sit inside this root, be a regular file that is not a link, and pass is_approved_source_path; then the
+  # very same type and prune filters as the walk run on it, with paths relative to the root exactly as the walk sees them.
+  root_identity="$(approved_root_identity "$SRC")" || { echo 'ingest-root: the selected folder is not approved' >&2; exit 2; }
+  rels=()
+  while IFS= read -r p || [ -n "$p" ]; do
+    case "$p" in "$SRC"/*) ;; *) continue ;; esac
+    case "$p" in *$'\n'*|*$'\r'*|*$'\t'*) continue ;; esac
+    [ -f "$p" ] && [ ! -L "$p" ] && is_approved_source_path "$p" || continue
+    nb_in_brain_moc "$p" && continue
+    rels+=("./${p#"$SRC"/}")
+  done < "$LISTED"
+  : > "$relative"
+  if [ "${#rels[@]}" -gt 0 ]; then
+    ( cd "$SRC" 2>/dev/null && [ "$(stat -f '%d:%i' . 2>/dev/null)" = "$root_identity" ] || exit 2
+      find "${rels[@]}" -type f \( \
+           -iname '*.md' -o -iname '*.txt' -o -iname '*.pdf' \
+        -o -iname '*.docx' -o -iname '*.doc' -o -iname '*.pages' -o -iname '*.rtf' \) \
+        "${PRUNE_FIND[@]}" -print0 | while IFS= read -r -d '' entry; do printf '%s/%s\0' "$SRC" "${entry#./}"; done
+    ) > "$relative" || { echo 'ingest-root: selected folder changed identity; no new rows were written' >&2; exit 2; }
+  fi
+else
 selected_root_find0 "$SRC" "${PRUNE_DIRS[@]}" -type f \( \
-     -name '*.md' -o -name '*.txt' -o -name '*.pdf' \
-  -o -name '*.docx' -o -name '*.doc' -o -name '*.pages' -o -name '*.rtf' \) \
+     -iname '*.md' -o -iname '*.txt' -o -iname '*.pdf' \
+  -o -iname '*.docx' -o -iname '*.doc' -o -iname '*.pages' -o -iname '*.rtf' \) \
   "${PRUNE_FIND[@]}" > "$relative" || { echo 'ingest-root: selected folder changed identity during traversal; no new rows were written' >&2; exit 2; }
+fi
 while IFS= read -r -d '' f; do printf '%s\n' "$f"; done < "$relative" | sort > "$found"
+
+# New files only: online-only cloud files are left for databrain_cloud_fetch (reading them would download them), then the privacy
+# screen (names, then text of md/txt). Dropped files never become rows.
+dropped="$tmpd/dropped"; : > "$dropped"
+comm -23 "$found" "$existing" > "$tmpd/candidates"
+nb_dataless_paths < "$tmpd/candidates" | sort > "$tmpd/cloud"
+if [ -s "$tmpd/cloud" ]; then comm -23 "$tmpd/candidates" "$tmpd/cloud" > "$tmpd/local"; else cp "$tmpd/candidates" "$tmpd/local"; fi
+if [ -n "${NB_PRIVACY_FILE:-}" ]; then
+  /usr/bin/perl "$ROOT/bin/privacy.pl" filter < "$tmpd/local" > "$tmpd/kept" || { echo 'ingest-root: privacy screen failed' >&2; exit 2; }
+else
+  cp "$tmpd/local" "$tmpd/kept"
+fi
+comm -23 "$tmpd/candidates" "$tmpd/kept" > "$dropped"
 
 added=0; skipped=0; unsafe=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   if grep -qxF "$f" "$existing"; then skipped=$((skipped + 1)); continue; fi
+  if [ -s "$dropped" ] && grep -qxF "$f" "$dropped"; then continue; fi
   base="$(basename "$f")"
-  ext="${base##*.}"
+  ext="${base##*.}"; ext_lower="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"   # ext keeps its real case: the title strips the real suffix
   title="$(basename "$f" ".$ext" | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2} //')"
   canon="${f/#$HOME/~}"
   kw='-'
-  if [ "$ext" = "md" ]; then
+  if [ "$ext_lower" = "md" ]; then
+    # A Markdown file this Mac will not let us read (permission, or gone since the walk) is left out, not fatal: the inventory reports
+    # it as unreadable. Only a file that changes identity while being read still stops the commit.
+    [ -r "$f" ] || continue
     fm="$(read_approved_frontmatter "$f")" || {
       echo 'ingest-root: a source changed before its frontmatter could be read; no new rows were committed' >&2
       unsafe=$((unsafe + 1))

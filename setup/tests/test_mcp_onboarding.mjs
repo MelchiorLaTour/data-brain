@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+process.env.DATABRAIN_TEST_NO_AUTO_LABELS = '1';   // this test walks the manual labelling steps; test_mcp_auto_labels.mjs covers the automatic finish
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverScript = process.env.DATABRAIN_SERVER || path.join(here, '../mcp/server.mjs');
@@ -66,7 +67,7 @@ async function runCase(name, selected, precreate = false, sourceRoots = []) {
       assert(startText.includes('already exists') && await fs.readFile(path.join(dataHome, 'keep.txt'), 'utf8') === 'existing user data');
       return;
     }
-    assert(startText.includes('folder chooser is open'));
+    assert(startText.includes('folder selection is open'));
     let status = '';
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const reply = await request('tools/call', { name: 'databrain_setup_status', arguments: {} });

@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+process.env.DATABRAIN_TEST_NO_AUTO_LABELS = '1';   // this test walks the manual labelling steps; test_mcp_auto_labels.mjs covers the automatic finish
 
 // Same-version local package-replacement/uninstall simulation. This checks the
 // boundary between disposable extension files and persistent user data; it is
@@ -32,6 +33,8 @@ async function treeDigest(root) {
       const child = path.join(folder, entry.name);
       const name = path.posix.join(relative, entry.name);
       if (entry.isDirectory()) await visit(child, name);
+      // the timing log gains one "server-start" line each time a server starts (diagnostics, not persisted state): everything else in it must not change
+      else if (entry.isFile() && name.endsWith('stage-timing.log')) entries.push(`${name}\0${createHash('sha256').update((await fs.readFile(child, 'utf8')).split('\n').filter(line => !line.includes('\tserver-start\t')).join('\n')).digest('hex')}`);
       else if (entry.isFile()) entries.push(`${name}\0${await digestFile(child)}`);
       else entries.push(`${name}\0special:${entry.isSymbolicLink() ? await fs.readlink(child) : 'other'}`);
     }
@@ -136,6 +139,7 @@ try {
     const repeat = await call(replacement, 'databrain_setup_start');
     assert.match(repeat, /setup has already started/i, repeat);
     assert.equal(await treeDigest(dataHome), dataBeforeReplacement, 'repeated setup changed persisted DataBrain files');
+    assert(/\tserver-start\t.*pid=\d+ version=\d+\.\d+\.\d+/.test(await fs.readFile(path.join(dataHome, '.databrain', 'stage-timing.log'), 'utf8')), 'the replacement server logged its start (pid and version)');
     const hit = await call(replacement, 'databrain_search', { query: 'bluejay lifecycle needle' });
     assert.match(hit, /only-record\.md/, hit);
     const status = await call(replacement, 'databrain_setup_status');

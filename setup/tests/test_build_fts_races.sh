@@ -25,7 +25,6 @@ sqlite3 "$moc/fts.db" <<'SQL'
 CREATE VIRTUAL TABLE notes USING fts5(path UNINDEXED, title, themes, keywords, body);
 INSERT INTO notes VALUES ('old.md', 'Old', '-', 'preserve', 'PREVIOUS_INDEX_SENTINEL');
 SQL
-before="$(shasum -a 256 "$moc/fts.db")"
 cat > "$shim/cat" <<'SH'
 #!/bin/bash
 set -eu
@@ -43,12 +42,12 @@ PATH="$shim:/usr/bin:/bin:/usr/sbin:/sbin" \
   NB_MOC_DIR="$moc" NB_CANON_ROOTS_FILE="$SCRATCH/roots.txt" \
   RACE_TARGET="$target" RACE_HELD="$held" RACE_OUTSIDE="$sentinel" RACE_MARKER="$marker" \
   bash "$ROOT/bin/build-fts.sh" > "$SCRATCH/output.log" 2>&1 || status=$?
-[ "$status" -ne 0 ] || { cat "$SCRATCH/output.log" >&2; echo 'FAIL: FTS rebuild accepted a source changed during descriptor copy' >&2; exit 1; }
+# 2026-10-12: a file that changes (here: swapped for a link to outside bytes) while it is being read no longer fails the whole build. It is
+# read again; when it is still not the approved file after 3 tries it is left out and logged. What must never happen is unchanged: the outside
+# bytes do not enter the generated state, and the swapped file is not indexed.
+[ "$status" -eq 0 ] || { cat "$SCRATCH/output.log" >&2; echo 'FAIL: one swapped file failed the whole FTS build' >&2; exit 1; }
 [ -e "$marker" ] || { cat "$SCRATCH/output.log" >&2; echo 'FAIL: FTS source-swap race was not injected' >&2; exit 1; }
-[ "$(shasum -a 256 "$moc/fts.db")" = "$before" ] || { echo 'FAIL: failed FTS rebuild replaced the last usable database' >&2; exit 1; }
+grep -q 'left out of this build' "$SCRATCH/output.log" || { cat "$SCRATCH/output.log" >&2; echo 'FAIL: the swapped file was not reported as left out' >&2; exit 1; }
 ! rg -l 'OUTSIDE_SECRET_SENTINEL' "$moc" >/dev/null || { echo 'FAIL: outside bytes entered generated DataBrain state' >&2; exit 1; }
-sqlite3 "$moc/fts.db" "SELECT body FROM notes WHERE path='old.md';" | rg -q '^PREVIOUS_INDEX_SENTINEL$' || {
-  echo 'FAIL: the prior searchable row was not preserved' >&2
-  exit 1
-}
-echo 'PASS: FTS rebuild rejects a source swapped during descriptor copy, preserves the previous database, and excludes outside bytes.'
+[ "$(sqlite3 "$moc/fts.db" "SELECT count(*) FROM notes WHERE path='$target';")" = 0 ] || { echo 'FAIL: the swapped file was indexed' >&2; exit 1; }
+echo 'PASS: FTS rebuild leaves out a source swapped during descriptor copy (build still succeeds), never indexes it, and excludes outside bytes.'

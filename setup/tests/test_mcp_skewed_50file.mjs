@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+process.env.DATABRAIN_TEST_NO_AUTO_LABELS = '1';   // this test walks the manual labelling steps; test_mcp_auto_labels.mjs covers the automatic finish
 
 const [engine] = process.argv.slice(2);
 assert(engine, 'usage: test_mcp_skewed_50file.mjs PACKAGED_ENGINE_DIRECTORY');
@@ -60,6 +61,7 @@ const server = spawn(launcher || process.execPath,
   env: {
     ...process.env,
     HOME: home,
+    DATABRAIN_TEST_PRIVACY_CONSENT: 'yes',
     DATABRAIN_ENGINE_DIR: engine,
     DATABRAIN_TEST_HOME: dataHome,
     DATABRAIN_TEST_SELECTION_FILE: selectionFile,
@@ -131,6 +133,13 @@ try {
     await waitForStatus(status => status.includes('Stage: sources selected.'), 'disposable source selection');
     await call('databrain_setup_run');
   }
+  // The privacy screen may hold fixture names that look private; the user here says all of them are fine.
+  const afterScan = await waitForStatus(status => status.startsWith('SETUP PAUSED FOR PRIVACY REVIEW') || status.includes('Stage: taxonomy pending.'), 'privacy scan or indexing');
+  if (afterScan.startsWith('SETUP PAUSED FOR PRIVACY REVIEW')) {
+    const held = (await call('databrain_privacy', { action: 'list' })).split('\n').filter(line => line.startsWith('- ')).map(line => line.slice(2).replace(/ \([^()]*\)$/, ''));
+    console.log(`privacy screen held ${held.length} fixture file(s): ${held.slice(0, 3).join(' | ')}`);
+    await call('databrain_privacy', { action: 'decide', keep: held });
+  }
   const indexedStatus = await waitForStatus(status =>
     status.includes('Stage: taxonomy pending.') && status.includes('Indexed rows: 50.') &&
       (launcher ? /initial setup permissions: complete/.test(status) : /initial indexing: complete/.test(status)),
@@ -142,7 +151,7 @@ try {
   assert.match(health, /Index records: 50; missing 0; unsafe 0; outside approved roots 0\./, health);
   assert.match(health, /File inventory: 50 indexed; 0 eligible missing; 0 unsupported; unreadable 0; placeholders 0; empty 0; traversal errors 0\./, health);
   assert.match(health, /Source freshness: current\./, health);
-  assert.match(health, /Ranked search database: 50 rows; quick_check ok\./, health);
+  assert.match(health, /Ranked search database: 50 source files; 50 FTS section rows; quick_check ok\./, health);
 
   const proposals = await call('databrain_taxonomy_candidates');
   for (const row of categories) {
@@ -198,7 +207,7 @@ try {
   const absent = await call('databrain_search', { query: 'syntheticabsentquery nofixturematch', limit: 8 });
   assert.match(absent, /no matches|no content words/i, `absent synthetic query should return no hits: ${absent}`);
   const postHealth = await call('databrain_health');
-  assert.match(postHealth, /Ranked search database: 50 rows; quick_check ok\./, postHealth);
+  assert.match(postHealth, /Ranked search database: 50 source files; 50 FTS section rows; quick_check ok\./, postHealth);
   const installAudit = await call('databrain_verify_install');
   assert.match(installAudit, /Installed DataBrain audit: PARTIAL — inspect failed or blocked checks below\./, installAudit);
   assert.match(installAudit, launcher

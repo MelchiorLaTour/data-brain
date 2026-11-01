@@ -238,7 +238,7 @@ try {
     assert.match(terminal('abstain-check.sh', ['quartz telescope migration', 'violet meteorology ledger']), /DRY/i);
     const health = await client.call('databrain_health');
     assert.match(health, /Source freshness: current\./);
-    assert.match(health, /Ranked search database: \d+ rows; quick_check ok/);
+    assert.match(health, /Ranked search database: \d+ source files?; \d+ FTS section rows?; quick_check ok/);
   }
 
   const followup = path.join(projects, 'post-refresh-followup.md');

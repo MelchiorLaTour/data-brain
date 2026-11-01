@@ -20,6 +20,7 @@ cp "$ROOT/LICENSE" "$STAGE/LICENSE"
 # In particular, do not copy corpus-derived dictionaries or other repository content.
 ENGINE_BIN_FILES=(
   build-fts.sh
+  build-fts-fr.sh
   build-index.sh
   canon.sh
   extract.sh
@@ -33,12 +34,15 @@ ENGINE_BIN_FILES=(
   refresh.sh
   taxonomy.sh
   prune-missing.sh
+  privacy.pl
+  privacy-names.sh
+  cloud-scan.sh
 )
 for file in "${ENGINE_BIN_FILES[@]}"; do
   [ -f "$ROOT/bin/$file" ] || { echo "build: missing required engine script bin/$file" >&2; exit 2; }
   cp "$ROOT/bin/$file" "$STAGE/bin/$file"
 done
-cp "$ROOT/setup/mcp/server.mjs" "$ROOT/setup/mcp/relationship-core.mjs" "$ROOT/setup/mcp/taxonomy-core.mjs" "$ROOT/setup/mcp/freshness-core.mjs" "$ROOT/setup/mcp/github-release-check.mjs" "$ROOT/setup/mcp/codex-state.mjs" "$ROOT/setup/mcp/package-identity.mjs" "$ROOT/setup/mcp/folder-picker.js" "$ROOT/setup/mcp/pdf-extract.js" "$STAGE/setup/mcp/"
+cp "$ROOT/setup/mcp/server.mjs" "$ROOT/setup/mcp/relationship-core.mjs" "$ROOT/setup/mcp/taxonomy-core.mjs" "$ROOT/setup/mcp/freshness-core.mjs" "$ROOT/setup/mcp/github-release-check.mjs" "$ROOT/setup/mcp/codex-state.mjs" "$ROOT/setup/mcp/package-identity.mjs" "$ROOT/setup/mcp/pdf-extract.js" "$ROOT/setup/mcp/app-readers.mjs" "$ROOT/setup/mcp/app-policy.mjs" "$ROOT/setup/mcp/test-hooks.mjs" "$STAGE/setup/mcp/"
 
 engine_revision="$(git -C "$ROOT" rev-parse HEAD)"
 engine_repository="$(git -C "$ROOT" remote get-url origin)"

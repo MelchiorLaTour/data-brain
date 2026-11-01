@@ -50,7 +50,7 @@ grep -Fq '2–12 distinct search keywords' "$TMP/duplicate.err"
 [ ! -e "$ROOT/$DATE Duplicate keywords.md" ]
 
 # Private capture text must never be appended into the product checkout.
-if rg -l -F 'Rare indigo kestrel signal recorded for retrieval.' "$PROJECT_ROOT" --glob '!**/.git/**' --glob '!setup/tests/test_terminal_capture.sh' >/dev/null; then
+if rg -l -F 'Rare indigo kestrel signal recorded for retrieval.' "$PROJECT_ROOT" --glob '!**/.git/**' --glob '!**/test_terminal_capture.sh' >/dev/null; then
   echo 'capture content leaked into the product checkout' >&2; exit 1
 fi
 [ ! -e "$PROJECT_ROOT/INBOX.md" ] || ! rg -q -F 'Rare indigo kestrel signal recorded for retrieval.' "$PROJECT_ROOT/INBOX.md"
