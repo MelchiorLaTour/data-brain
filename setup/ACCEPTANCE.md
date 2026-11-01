@@ -297,3 +297,4 @@ shim contract, not a physical Windows installation.
 
 - Intermittent: Codex category application once hit 'approved source changed during read' (1 of 8 suite runs, 2026-10-02); cause not yet found.
 - `test_mcp_data_route.mjs` is not wired into a runner and fails on main, branch and merged builds at later fixture checks; line 421 (unreadable file stays searchable) failed once in 6 runs (2026-10-03). Fix tracked separately.
+- Known: github-release-check reads /commits/<sha> with a 64 KB cap; a release built from a very large commit fails it. Fix later by reading /git/commits/<sha>.
