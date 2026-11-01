@@ -218,9 +218,10 @@ reproduced; treat them as existence proofs, not benchmarks.
 The Claude Desktop extension is available from the
 [latest release](https://github.com/MelchiorLaTour/data-brain/releases/latest). Its
 intended first-run flow is one `.mcpb` download, installation through Claude Desktop's
-Extensions settings, and a new chat with **“Set up my DataBrain.”** Physical installation,
-restart, and real-corpus retrieval remain unverified; see [setup/README.md](setup/README.md)
-for package and test status.
+Extensions settings, and a new chat with **“Set up my DataBrain.”** Tested on a real Mac in
+Claude Desktop: install, setup on real folders, search, note capture and the health check. Not
+tested yet: a reboot after install and iCloud moving Desktop & Documents. See
+[setup/README.md](setup/README.md) for package and test status.
 
 The established terminal installation is two layers:
 
