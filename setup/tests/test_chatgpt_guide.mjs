@@ -64,6 +64,21 @@ assert(/Pre-release/.test(text) && !/Tested on one Mac/.test(text), 'the page do
   for (const phrase of ['data-brain', 'Mac download', 'ChatGPT app', 'download link in the heading', 'only opens a preview page']) assert(stepText(2).includes(phrase), `step 2 says "${phrase}": ${stepText(2).slice(0, 200)}`);
   for (const phrase of ['Mac download', 'ChatGPT app', 'download link in the heading']) assert(readme.includes(phrase), `the README steps say "${phrase}"`);
 }
+// part 34: ChatGPT's own "Enable ChatGPT Computer Use" window is not DataBrain's; step 10 says so in one small italic note
+{
+  const stepHtml = n => html.match(new RegExp(`<span class="n">${n} →</span>([\\s\\S]*?)</li>`))?.[1] ?? '';
+  const note = stepHtml(10).match(/<span class="fine"><em>([\s\S]*?)<\/em><\/span>/)?.[1] ?? '';
+  assert(note, 'step 10 carries the Computer Use note: italic (<em>) inside a small-print span');
+  const noteText = plain(note);
+  assert(/"Enable ChatGPT Computer Use"/.test(noteText) && /Accessibility/.test(noteText) && /Screenshots/.test(noteText) && /Chrome Extension/.test(noteText), `the note names the window and what it asks for: ${noteText}`);
+  assert(/you can close it/.test(noteText) && /DataBrain does not need it/.test(noteText), `the note says to close it and that DataBrain does not need it: ${noteText}`);
+  assert(/access to your folders/.test(noteText) && /permission to control that app/.test(noteText), `the note lists what DataBrain does need: ${noteText}`);
+  assert(!noteText.includes('—'), 'no em-dash in the note');
+  assert.equal((stepHtml(10).match(/\[CHECK\]/g) || []).length, 1, 'step 10 keeps its one [CHECK] marker');
+  for (const n of steps.filter(n => n !== 10)) assert(!/Computer Use/.test(stepHtml(n)), `the note is only in step 10, not step ${n}`);
+  const fine = html.match(/\.fine\s*\{([^}]*)\}/)?.[1] ?? '';
+  assert(/font-style:\s*italic/.test(fine) && Number(fine.match(/font-size:\s*(\d+)px/)?.[1]) <= 15 && /color:\s*var\(--muted\)/.test(fine), `.fine is small italic muted text (readable on the guide's dark page): ${fine}`);
+}
 // the README and the downloads folder point at the same installer
 assert(readme.includes('Mac%20download/ChatGPT%20app/DataBrain-ChatGPT-Installer-0.2.1.zip') && macReadme.includes('DataBrain-ChatGPT-Installer-0.2.1.zip'));
 console.log(`PASS: ChatGPT guide: ${steps.length} steps, the installer and the Open Anyway path, the picker folder step, the privacy sentence word for word, the training note, no Custom Instructions anywhere, repair and no-AI recovery, no Claude wording, no em-dash, ${checks} [CHECK] markers.`);
