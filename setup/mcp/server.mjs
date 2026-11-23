@@ -4564,16 +4564,24 @@ async function beginIndexing(refresh = false, automaticRefresh = false, resumeNo
     requireCodexScope(state, 'localDerivedWrites');
     return launchIndexWorker(state, refresh, automaticRefresh);
   }
+  // ChatGPT host (part 33): setup never waits for the private-file review. Files whose names look private stay held (never opened, read or
+  // indexed: the held list drops them) and everything else is indexed at once; the review file is optional and can be used later.
+  let privateNote = '';
   if (!refresh && !state.privacyScanned) {
     await runEngine('privacy-names.sh', [], { message: 'Checking file and folder names. No file is opened.' });
     const held = await heldFiles();
     state.privacyScanned = true;
-    state.privacyPending = held.length > 0;
+    state.privacyPending = chatgptMode ? false : held.length > 0;
     state.updatedAt = new Date().toISOString();
     await writeState(state);
-    if (held.length) { await announceHeld(held); return await privacyListText(held, true); }
+    if (held.length && chatgptMode) {
+      await announceHeld(held);
+      privateNote = `${await privacyListText(held, false)} Indexing does not wait for this: the review is optional and can be done later.`;
+    } else if (held.length) { await announceHeld(held); return await privacyListText(held, true); }
   } else if (!refresh && state.privacyPending) {
-    return await privacyListText(await heldFiles(), true);
+    if (!chatgptMode) return await privacyListText(await heldFiles(), true);
+    state.privacyPending = false;   // a brain paused by an earlier build: carry on, the held files stay held
+    privateNote = `${PRIVATE_SENTENCE} Indexing does not wait for the review; it is optional and can be done later.`;
   }
   state.stage = 'indexing';
   if (resumeNote) state.resumeNote = resumeNote; else { delete state.resumeNote; delete state.indexFailures; }
@@ -4604,7 +4612,7 @@ async function beginIndexing(refresh = false, automaticRefresh = false, resumeNo
     }
     return message;
   });
-  return `Indexing started as job ${job.id}. The local job can take time for large folders.`;
+  return `${privateNote ? `${privateNote} ` : ''}Indexing started as job ${job.id}. The local job can take time for large folders.`;
 }
 
 async function performIndexing(roots, refresh, current) {
@@ -4773,7 +4781,7 @@ async function setupUnfinishedBanner() {
   const state = await readState().catch(() => ({}));
   if (await dataHomeIsForeign(state)) return `SETUP BLOCKED. ${foreignDataBrainMessage()}\n\n`;
   if (!state.stage && selectedParent && configuredRoots?.length) return 'SETUP NOT STARTED. The folders are already saved in extension settings, which is the user\'s approval.\n\n';
-  if (state.stage === 'sources selected' && state.privacyPending) return `SETUP PAUSED FOR PRIVACY REVIEW. ${PRIVATE_SENTENCE} Indexing continues by itself once the user has reviewed them on their Mac.\n\n`;
+  if (state.stage === 'sources selected' && state.privacyPending && !chatgptMode) return `SETUP PAUSED FOR PRIVACY REVIEW. ${PRIVATE_SENTENCE} Indexing continues by itself once the user has reviewed them on their Mac.\n\n`;
   if (state.stage === 'sources selected') return 'SETUP NOT FINISHED. Indexing of the approved folders has not started; the approval given at setup start covers it.\n\n';
   if (state.stage === 'destination ready') return 'SETUP NOT FINISHED. No source folders are selected yet. Folders are added in Claude Desktop extension settings (Add directory) and applied on the next call, with no restart.\n\n';
   if (state.stage === 'taxonomy pending') return 'SETUP NOT FINISHED. The folder groups are not labelled yet.\n\n';
@@ -5613,7 +5621,7 @@ async function markReadyWhenVerified(force = false) {
   if (codexMode || !statePath || (!force && (process.env.DATABRAIN_TEST_STEP_BY_STEP === '1' || process.env.DATABRAIN_TEST_NO_AUTO_LABELS === '1'))) return false;
   if ([...activeJobs.values()].some(job => job.status === 'running') || orphanEngineAlive()) return false;
   const state = await readState().catch(() => ({}));
-  if (state.stage !== 'verification pending' || state.privacyPending || folderChangePending(state)) return false;
+  if (state.stage !== 'verification pending' || (state.privacyPending && !chatgptMode) || folderChangePending(state)) return false;
   let rows;
   try { rows = (await fs.readFile(path.join(mocDir, 'index.tsv'), 'utf8')).split('\n').filter(line => line && !line.startsWith('#')).map(line => line.split('\t')); }
   catch { return false; }

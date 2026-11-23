@@ -62,7 +62,8 @@ try {
   await rpc('initialize', { protocolVersion: '2025-03-26' });
   server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
   await call('databrain_setup_start');
-  await waitFor(async () => (await call('databrain_setup_status')).includes('SETUP PAUSED FOR PRIVACY REVIEW'), 'privacy pause');
+  // part 33: the ChatGPT host does not pause for the review; it indexes at once and the held files wait for the user's decision
+  await waitFor(async () => { const status = await call('databrain_setup_status'); return process.env.DATABRAIN_TEST_CLIENT === 'chatgpt' ? /Stage: (taxonomy pending|relationships pending|verification pending|ready)/.test(status) : status.includes('SETUP PAUSED FOR PRIVACY REVIEW'); }, 'privacy pause');
   const listed = await call('databrain_privacy', { action: 'list' });
   // Part 18: the chat list carries numbers only; the names are in a local file the model is not given
   const reviewText = () => fs.readFile(path.join(home, 'DataBrain', 'Private files review.txt'), 'utf8').catch(() => '');   // no file while nothing is held
@@ -77,13 +78,15 @@ try {
   assert.doesNotMatch(await call('databrain_privacy', { action: 'decide', keep: ['payslip.md'] }), /^Recorded/, 'a file name is not accepted');
   assert.match(await privacyFile(), /held\t.*payslip\.md/);
   assert.match(await privacyFile(), /held\t.*bank\.md/);
-  await assert.rejects(fs.stat(path.join(home, 'DataBrain', 'moc', 'index.tsv')), { code: 'ENOENT' });
+  if (process.env.DATABRAIN_TEST_CLIENT !== 'chatgpt') await assert.rejects(fs.stat(path.join(home, 'DataBrain', 'moc', 'index.tsv')), { code: 'ENOENT' });   // the ChatGPT host has indexed already (part 33)
   assert.doesNotMatch(await call('databrain_read', { path: path.join(docs, 'payslip.md') }), /private-marker-never-read-before-approval/);
 
   const approved = await call('databrain_privacy', { action: 'decide', keep: [await numberOf('payslip.md')] });
   assert.match(approved, /^Recorded\. The files the user kept/);
   assert.match(await privacyFile(), /allowed\t.*payslip\.md/);
   assert.match(await privacyFile(), /excluded\t.*bank\.md/);
+  secondHalf: {   // the app-item steps below depend on the Claude host's order (the approval starts the first indexing); on the ChatGPT host indexing ran before any decision (part 33)
+  if (process.env.DATABRAIN_TEST_CLIENT === 'chatgpt') { console.log('PASS (ChatGPT host, first half): held files stay held until the user names them; a forged extra path blocks the batch; naming releases one file and excludes the rest.'); break secondHalf; }
   await waitFor(async () => { await call('databrain_privacy', { action: 'list' }); return /\d+\. .+ item [0-9a-f]{6}   \(/.test(await reviewText()); }, 'app item held after app scan (named in the local file as "<App> item <id>", never by its title)');
   const appList = await call('databrain_privacy', { action: 'list' });
   assert(!/Payslip app item/.test(appList) && !/ item [0-9a-f]{6}/.test(appList), `an app item is not named in the chat list:\n${appList}`);
@@ -107,6 +110,7 @@ try {
   assert.match(activeMirrorApproval, /^Recorded\. The files the user kept/, 'active app mirror must not invalidate the selected user-root identity check');
   await waitFor(async () => /Stage: (?:taxonomy pending|verification pending|ready)\./.test(await call('databrain_setup_status')), 'ordinary active-mirror release to settle');
   console.log('PASS: held files stay held until the user names them; a forged extra path blocks the batch; naming releases a deleted held app item and ordinary files.');
+  }
 } finally {
   // Stop the server, then wait until it and every engine process it started (their command lines name the temp brain) are gone, so nothing is still writing when the folder is deleted.
   // Anything still alive 10 s after the stop is a product signal and fails the test with its own message. fs.rm is not retried and its errors are not swallowed.

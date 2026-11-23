@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 process.env.DATABRAIN_TEST_NO_AUTO_LABELS = '1';   // this test walks the manual labelling steps; test_mcp_auto_labels.mjs covers the automatic finish
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const gpt = process.env.DATABRAIN_TEST_CLIENT === 'chatgpt';   // part 33: the ChatGPT host indexes at once; the Claude host still pauses for the review
 const serverScript = process.env.DATABRAIN_SERVER || path.join(here, '../mcp/server.mjs');
 const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-privacy-')));
 const home = path.join(temp, 'home');
@@ -71,7 +72,7 @@ try {
   // 1. Setup start checks NAMES first and pauses with the list; nothing is indexed yet.
   await call('databrain_setup_start');
   let lastStatus = '';
-  await waitFor(async () => { lastStatus = await call('databrain_setup_status'); return lastStatus.startsWith('SETUP PAUSED FOR PRIVACY REVIEW') || null; }, 'the privacy pause').catch(error => { throw new Error(`${error.message}\n${lastStatus}`); });
+  await waitFor(async () => { lastStatus = await call('databrain_setup_status'); return (gpt ? lastStatus.includes('Stage: taxonomy pending') : lastStatus.startsWith('SETUP PAUSED FOR PRIVACY REVIEW')) || null; }, gpt ? 'indexing without a pause' : 'the privacy pause').catch(error => { throw new Error(`${error.message}\n${lastStatus}`); });
   const start = await call('databrain_privacy', { action: 'list' });
   assert(start.includes(PRIVATE) && !/\d|file\(s\)|waiting/.test(start), `the list is one sentence and says where the review file is:\n${start}`);
   const startFile = await reviewFile();   // names live in the local file only
@@ -83,13 +84,18 @@ try {
   assert(startFile.includes('Pay slip.pdf') && startFile.includes('2022-12-14 Cal Poly doctor note.pdf'), `both of Mel's real misses must be held at the name check:\n${startFile}`);
   assert(!startFile.includes('doctoral-thesis.md'), 'doctoral must not be flagged');
   assert(/IMG_2231\.jpg are NOT checked/.test(startFile) && /keep: no/.test(startFile), 'the local file says scanned images are not caught and carries the keep column');
-  await assert.rejects(fs.stat(path.join(dataHome, 'moc', 'index.tsv')), { code: 'ENOENT' }, 'nothing may be indexed before the review');
-  assert((await call('databrain_setup_status')).startsWith('SETUP PAUSED FOR PRIVACY REVIEW'));
-  assert(/paused for privacy review/.test(await call('databrain_setup_run')), 'setup_run must not skip the review');
+  if (gpt) assert(!/paused for privacy review/i.test(lastStatus + await call('databrain_setup_run')), 'part 33: the ChatGPT host never pauses for the review');
+  else {
+    await assert.rejects(fs.stat(path.join(dataHome, 'moc', 'index.tsv')), { code: 'ENOENT' }, 'nothing may be indexed before the review');
+    assert((await call('databrain_setup_status')).startsWith('SETUP PAUSED FOR PRIVACY REVIEW'));
+    assert(/paused for privacy review/.test(await call('databrain_setup_run')), 'setup_run must not skip the review');
+  }
 
   // 2. The user excludes all (empty keep): indexing then starts by itself.
-  const decided = await call('databrain_privacy', { action: 'decide', keep: [] });
-  assert(/^Recorded\. No file was kept/.test(decided) && !/\d/.test(decided.split('Indexing')[0]), decided);
+  if (!gpt) {   // the ChatGPT host indexed already and the review stays optional: nothing to decide yet (a decide now would also exclude the content-held files)
+    const decided = await call('databrain_privacy', { action: 'decide', keep: [] });
+    assert(/^Recorded\. No file was kept/.test(decided) && !/\d/.test(decided.split('Indexing')[0]), decided);
+  }
   await waitFor(async () => (await call('databrain_setup_status')).includes('Stage: taxonomy pending') || null, 'indexing after the review');
 
   // 3. Only harmless files are in the index; the content screen held the rest before indexing.
