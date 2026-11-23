@@ -40,14 +40,15 @@ await fs.writeFile(decoy, [
   '',
 ].join('\n'));
 
+// ChatGPT host: no destination chooser and no settings list; the folder is named in the chat and the brain lives in ~/DataBrain (server.mjs lines 1948-1960).
+const chatgpt = process.env.DATABRAIN_TEST_CLIENT === 'chatgpt' && !launcher;
 const server = spawn(launcher || process.execPath,
-  launcher ? [] : [path.join(engine, 'setup/mcp/server.mjs')], {
+  launcher ? [] : [path.join(engine, 'setup/mcp/server.mjs'), ...(chatgpt ? ['--databrain-client', 'chatgpt'] : [])], {
   env: {
     ...process.env,
     HOME: home,
     DATABRAIN_ENGINE_DIR: engine,
-    DATABRAIN_TEST_HOME: dataHome,
-    DATABRAIN_TEST_SELECTION_FILE: selectionFile,
+    ...(chatgpt ? {} : { DATABRAIN_TEST_HOME: dataHome, DATABRAIN_TEST_SELECTION_FILE: selectionFile }),   // the chooser hooks do not exist on ChatGPT
     PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
   },
   stdio: ['pipe', 'pipe', 'pipe'],
@@ -103,7 +104,11 @@ try {
     clientInfo: { name: 'synthetic-multivariant-workflow', version: '1' },
   });
   server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
-  if (launcher) {
+  if (chatgpt) {
+    await call('databrain_setup_start', { folders: [await fs.realpath(corpus)] });
+    await call('databrain_setup_start', { folders: [await fs.realpath(corpus)], confirmed: true });
+    await waitForStatus(status => status.includes('Stage: taxonomy pending.') && /initial indexing: complete/.test(status), 'two-file index');
+  } else if (launcher) {
     await fs.writeFile(selectionFile, JSON.stringify({
       selections: { sources: [await fs.realpath(corpus)], 'destination-parent': [desktop] },
       approved: true,

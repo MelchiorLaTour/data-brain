@@ -127,4 +127,24 @@ const codexArchitectureMismatch = await checkGitHubRelease({
   fetchImpl: codexFetch,
 });
 assert.equal(codexArchitectureMismatch.state, 'BLOCKED');
+// The ChatGPT installer package: its own tag assets, the same source checks, and a record that must say it is a ChatGPT package.
+const gptManifest = { name: 'databrain', version: '0.2.1' };
+const gptBuild = { ...build, package_kind: 'chatgpt', package_version: '0.2.1', architecture: 'darwin-arm64', runtime_version: '24.22.2' };
+const gptStem = 'DataBrain-ChatGPT-Installer-0.2.1';
+const gptAssetUrl = name => `https://github.com/MelchiorLaTour/data-brain/releases/download/v0.2.1/${name}`;
+const gptAssets = [`${gptStem}.zip`, `${gptStem}.zip.sha256`, `${gptStem}.buildinfo.txt`].map(name => ({ name, browser_download_url: gptAssetUrl(name) }));
+const gptInfo = Object.entries(gptBuild).map(([key, value]) => `${key}=${value}`).join('\n');
+const gptFetch = ({ assets = gptAssets, record = gptInfo } = {}) => async url => {
+  if (url.endsWith('/releases/tags/v0.2.1')) return new Response(JSON.stringify({ tag_name: 'v0.2.1', draft: false, assets }));
+  if (url.endsWith(`/commits/${build.engine_revision}`)) return new Response(JSON.stringify({ sha: build.engine_revision }));
+  if (url.endsWith('/git/ref/tags/v0.2.1')) return new Response(JSON.stringify({ object: { sha: build.engine_revision, type: 'commit' } }));
+  if (url === gptAssetUrl(`${gptStem}.buildinfo.txt`)) return new Response(record);
+  throw new Error(`Unexpected ChatGPT release URL: ${url}`);
+};
+const gptRelease = await checkGitHubRelease({ manifest: gptManifest, build: gptBuild, fetchImpl: gptFetch() });
+assert.equal(gptRelease.state, 'PASS');
+assert.match(gptRelease.detail, /chatgpt version 0\.2\.1/);
+assert.equal((await checkGitHubRelease({ manifest: gptManifest, build: gptBuild, fetchImpl: gptFetch({ assets: gptAssets.filter(asset => !asset.name.endsWith('.zip')) }) })).state, 'BLOCKED');
+assert.equal((await checkGitHubRelease({ manifest: gptManifest, build: gptBuild, fetchImpl: gptFetch({ record: gptInfo.replace('package_kind=chatgpt', 'package_kind=claude') }) })).state, 'FAIL');
+assert.equal((await checkGitHubRelease({ manifest: gptManifest, build: gptBuild, fetchImpl: async () => new Response(null, { status: 404 }) })).state, 'BLOCKED');
 process.stdout.write('PASS: GitHub release audit checks the installed version tag including prereleases, required assets, a reachable source commit, and lightweight or bounded nested annotated tag identity; rejects drafts and invalid versions, rejects cyclic tags, bounds responses, accepts exact metadata and approved redirects, detects mismatches, blocks a missing release, and rejects unexpected hosts and redirects.\n');

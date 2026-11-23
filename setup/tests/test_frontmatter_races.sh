@@ -69,7 +69,13 @@ SH
   else
     status=$?
   fi
-  [ "$status" -ne 0 ] || { cat "$SCRATCH/$name/output.log" >&2; echo "FAIL: $kind accepted a raced source" >&2; exit 1; }
+  # build-index replaces the whole index, so it still stops. ingest-root only appends: it leaves the raced file out and finishes.
+  if [ "$kind" = build ]; then
+    [ "$status" -ne 0 ] || { cat "$SCRATCH/$name/output.log" >&2; echo "FAIL: $kind accepted a raced source" >&2; exit 1; }
+  else
+    [ "$status" -eq 0 ] || { cat "$SCRATCH/$name/output.log" >&2; echo "FAIL: $kind stopped the pass for one raced source" >&2; exit 1; }
+    ! rg -q 'source\.md' "$moc/index.tsv" || { echo "FAIL: $kind indexed a raced source" >&2; exit 1; }
+  fi
   [ -e "$marker" ] || { echo "FAIL: $kind race was not injected" >&2; exit 1; }
   after="$(shasum -a 256 "$moc/index.tsv")"
   [ "$before" = "$after" ] || { echo "FAIL: $kind changed the prior index after a source race" >&2; exit 1; }

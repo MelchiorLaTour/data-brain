@@ -52,10 +52,14 @@ while IFS= read -r f; do
   title="$(basename "$f" .md | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2} //')"
   canon="${f/#$HOME/~}"
   # Read labels from one verified descriptor; never follow a post-walk path swap.
-  fm="$(read_approved_frontmatter "$f")" || {
+  # A ctime-only move (iCloud) is re-read once. This seeder replaces the whole index, so a file that really changed still stops the
+  # run and keeps the previous index (ingest-root.sh, which only appends, skips such a file instead).
+  fm="$(read_approved_frontmatter "$f")"; fm_rc=$?
+  if [ "$fm_rc" -eq 3 ]; then fm="$(read_approved_frontmatter "$f")"; fm_rc=$?; fi
+  if [ "$fm_rc" -ne 0 ]; then
     echo "build-index: source changed before frontmatter could be read; preserving the previous index" >&2
     exit 2
-  }
+  fi
   # themes: `theme: [a, b]` OR `theme: a` -> comma-list, whitespace stripped
   themes="$(printf '%s\n' "$fm" | sed -n -e 's/^theme:[[:space:]]*\[\(.*\)\][[:space:]]*$/\1/p' -e 's/^theme:[[:space:]]*\([^[].*\)$/\1/p' | head -1 | tr -d '[:space:]')"
   # keywords from `tags: [ ... ]`; drop the generic `user` tag and bare years

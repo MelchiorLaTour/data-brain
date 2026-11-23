@@ -117,7 +117,8 @@ try {
   assert.equal((await count('app check', 'job-end')) - checksBefore, 1, 'and exactly one ends');
   const skipped = (await timing()).filter(f => f[3] === 'app-check-skipped');
   assert(skipped.every(f => /another client/.test(f[5] || '')), `a server that skipped says why: ${JSON.stringify(skipped)}`);   // a server that starts after the check finished has nothing to skip and logs nothing
-  assert.deepEqual((await log()).filter(l => l === 'full' || l === 'dates'), ['full'], `four servers, ONE read of the app: ${JSON.stringify(await log())}`);
+  // part 11: an app that was read before is asked for its dates once; 302 changed pages are past the incremental limit, so that one question is followed by ONE full read
+  assert.deepEqual((await log()).filter(l => l === 'full' || l === 'dates'), ['dates', 'full'], `four servers, ONE read of the app: ${JSON.stringify(await log())}`);
   assert.equal((await jobStarts('refresh')) - refreshesBefore, 1, 'exactly one refresh');
   assert.deepEqual(await failed(), [], `no job failed:\n${(await failed()).map(f => f.join(' ')).join('\n')}`);
   const pids = (await timing()).filter(f => f[3] === 'server-start').map(f => (f[5].match(/pid=(\d+)/) || [])[1]).slice(-4);

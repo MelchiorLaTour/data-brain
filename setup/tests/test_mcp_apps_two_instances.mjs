@@ -90,8 +90,9 @@ try {
   await until(async () => (await jobStarts('refresh')) > refreshesBefore, 'a refresh starts', 60000).catch(async error => { throw new Error(`${error.message}\ncalls: ${(await log()).join(' | ')}\n${(await timing()).slice(-25).map(f => f.join(' ')).join('\n')}\n${(await a.tool('databrain_setup_status')).slice(0, 2500)}`); });
   await until(async () => (await timing()).some(f => f[1] === 'refresh' && f[3] === 'job-end'), 'the refresh ends');
   await sleep(6000);   // time for a (wrong) second read or second refresh to show itself
-  const reads = (await log()).filter(l => l === 'full' || l === 'dates');
-  assert.deepEqual(reads, ['full'], `two instances, ONE read of the app: ${JSON.stringify(await log())}`);
+  // part 11: one dates question, then only the new page is fetched by id (no full read of the bodies)
+  const reads = (await log()).filter(l => l === 'full' || l === 'dates' || l.startsWith('fetch'));
+  assert.deepEqual(reads, ['dates', 'fetch x-2'], `two instances, ONE read of the app: ${JSON.stringify(await log())}`);
   assert.equal((await jobStarts('refresh')) - refreshesBefore, 1, 'exactly one refresh');
   assert.deepEqual(await failed(), [], `no job failed:\n${(await failed()).map(f => f.join(' ')).join('\n')}`);
   // every start leaves one line with its pid, so two servers on one brain show up as two pids

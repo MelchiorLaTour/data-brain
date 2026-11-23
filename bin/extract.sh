@@ -84,7 +84,7 @@ if [ "$(ps -o pgid= -p $$ | tr -d ' ')" = "$$" ]; then
 fi
 STOP="$tmpd/stop"; KWUP="$tmpd/kwupdates"; : > "$KWUP"
 REPORT_TMP="$tmpd/extract-report.tsv"
-printf '# canonical_path\tstatus\n' > "$REPORT_TMP"
+printf '# canonical_path\tstatus\tfingerprint(size:mtime, final statuses only)\n' > "$REPORT_TMP"
 # Pure-bash stopword list (EN + a few FR + the owner's name, the #1 header/footer pollutant) so
 # keyword extraction stays Claude-OFF. Short (<4 char) words are already dropped below.
 # EDIT: replace the two placeholder tokens with your own first/last name (lowercase).
@@ -128,6 +128,14 @@ derive_keywords() {
 }
 
 is_offloaded() { nb_is_dataless "$1"; }
+
+# Final outcomes are remembered with the file's size and mtime (never ctime: iCloud moves that alone). A file that ends in one of these is not
+# opened again, and an online-only one is not downloaded again, until its size or mtime changes.
+szm() { stat -f '%z:%m' "$1" 2>/dev/null || true; }
+prev_final() {   # canonical path -> "status<TAB>fingerprint" of an earlier final outcome, empty if none
+  [ -f "$MOC/extract-report.tsv" ] || return 0
+  P="$1" /usr/bin/awk -F'\t' 'FNR > 1 && $1 == ENVIRON["P"] && ($2 == "no_text_layer" || $2 == "read_failed" || $2 == "extraction_failed") { print $2 "\t" $3; exit }' "$MOC/extract-report.tsv"
+}
 
 # Per-file time limit so one bad or offline file is recorded as failed instead of freezing setup.
 EXTRACT_TIMEOUT="${NB_EXTRACT_TIMEOUT:-120}"
@@ -184,10 +192,36 @@ while IFS=$'\t' read -r path title themes keywords; do
     if [ -s "$EXDIR/$sc_hash.txt" ] || [ "$(sqlite3 -readonly "$MOC/fts.db" "SELECT 1 FROM notes WHERE path = '${path//\'/\'\'}' AND length(body) > 0 LIMIT 1;" 2>/dev/null)" = 1 ]; then
       printf '%s\tcloud_only\n' "$path" >> "$REPORT_TMP"; continue
     fi
+    # Already tried with a final outcome (a scan with no text, an unreadable file) and not changed since: do not download it again.
+    prev="$(prev_final "$path")"
+    if [ -n "$prev" ]; then
+      prev_status="${prev%%$'\t'*}"; prev_fp="${prev#*$'\t'}"; now_fp="$(szm "$f")"
+      if [ -n "$prev_fp" ]; then same_file=0; [ "$prev_fp" = "$now_fp" ] && same_file=1
+      else
+        # an older report has no fingerprint: the file counts as unchanged if its mtime is not newer than that report
+        same_file=0; [ "$(stat -f '%m' "$f" 2>/dev/null || echo 9999999999)" -le "$(stat -f '%m' "$MOC/extract-report.tsv" 2>/dev/null || echo 0)" ] && same_file=1
+      fi
+      if [ "$same_file" -eq 1 ]; then
+        [ "$prev_status" = no_text_layer ] && no_text=$((no_text+1))
+        printf '%s\t%s\t%s\n' "$path" "$prev_status" "$now_fp" >> "$REPORT_TMP"; continue
+      fi
+    fi
   fi
 
   hash="$(printf '%s' "$path" | shasum | cut -c1-16)"
   out="$EXDIR/$hash.txt"
+  # A file that is online-only at this point (never indexed before) is downloaded FIRST, by reading it once, and only then fingerprinted:
+  # macOS changes a file's ctime when it downloads it, so a fingerprint taken before the download could never match the one taken after
+  # (every such file failed as source_changed_during_copy). Once it is local, the checks below are unchanged: a file that really changes
+  # while it is copied still fails. was_off remembers it was online-only so it is put back online-only afterwards.
+  was_off=0
+  if is_offloaded "$f"; then
+    [ "$LIMIT" -gt 0 ] && [ "$processed" -ge "$LIMIT" ] && break
+    was_off=1; downloaded=$((downloaded+1))
+    if ! limit cat -- "$f" > /dev/null 2>&1; then
+      failed=$((failed+1)); printf '%s\tdownload_failed\n' "$path" >> "$REPORT_TMP"; continue
+    fi
+  fi
   # stat uses lstat semantics here. Once the file is opened below, comparing its
   # inode with /dev/fd/9 rejects a symlink swap between this check and open.
   fingerprint="$(stat -f '%i:%z:%m:%c' "$f" 2>/dev/null || true)"
@@ -233,7 +267,6 @@ while IFS=$'\t' read -r path title themes keywords; do
   [ "$LIMIT" -gt 0 ] && [ "$processed" -ge "$LIMIT" ] && break
   processed=$((processed+1))
 
-  was_off=0; if is_offloaded "$f"; then was_off=1; downloaded=$((downloaded+1)); fi
   if ! exec 9<"$f"; then
     failed=$((failed+1)); printf '%s\topen_failed\n' "$path" >> "$REPORT_TMP"; continue
   fi
@@ -245,7 +278,7 @@ while IFS=$'\t' read -r path title themes keywords; do
   staged_source="$tmpd/source.$ext"
   if ! limit cat /dev/fd/9 > "$staged_source"; then
     exec 9<&-
-    failed=$((failed+1)); printf '%s\tread_failed\n' "$path" >> "$REPORT_TMP"; continue
+    failed=$((failed+1)); printf '%s\tread_failed\t%s\n' "$path" "$(szm "$f")" >> "$REPORT_TMP"; continue
   fi
   after_copy_fd="$(fd9_fingerprint || true)"
   after_copy_path="$(stat -f '%i:%z:%m:%c' "$f" 2>/dev/null || true)"
@@ -277,9 +310,9 @@ while IFS=$'\t' read -r path title themes keywords; do
     fi
     if [ "$privacy_enabled" -eq 1 ]; then pending_removals+=("$out"); pending_removals_count=$((pending_removals_count+1)); else rm -f -- "$out"; fi
     if [ "$ext" = pdf ] && [ "$(cat "$tmpd/pdfrc" 2>/dev/null)" = 0 ]; then
-      no_text=$((no_text+1)); printf '%s\tno_text_layer\n' "$path" >> "$REPORT_TMP"; continue   # scanned image: opened fine, nothing to read (no OCR)
+      no_text=$((no_text+1)); printf '%s\tno_text_layer\t%s\n' "$path" "$(szm "$f")" >> "$REPORT_TMP"; continue   # scanned image: opened fine, nothing to read (no OCR)
     fi
-    failed=$((failed+1)); printf '%s\textraction_failed\n' "$path" >> "$REPORT_TMP"; continue
+    failed=$((failed+1)); printf '%s\textraction_failed\t%s\n' "$path" "$(szm "$f")" >> "$REPORT_TMP"; continue
   fi
 
   # Privacy screen on the extracted text, before it can reach the index: a clear private pattern

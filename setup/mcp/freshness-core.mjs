@@ -79,8 +79,10 @@ async function isBrainGeneratedFolder(directory, name) {
   return exists(path.join(path.dirname(directory), '.databrain', 'desktop-state.json'));
 }
 
+const codexOutputFolder = () => path.join(os.homedir(), 'Documents', 'Codex');
 /** Enumerate names and file metadata under approved roots without opening document contents. */
 export async function scanSelectedFiles({ roots }) {
+  const skipCodexOutput = process.env.DATABRAIN_SKIP_CODEX_OUTPUT === '1';
   const approved = await checkedRoots(roots);
   const files = new Set();
   async function walk(directory, root) {
@@ -92,7 +94,7 @@ export async function scanSelectedFiles({ roots }) {
       if (isSensitivePath(candidate)) continue;
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
-        if (excludedDirectories.has(entry.name) || entry.name.endsWith('.app')) continue;
+        if (excludedDirectories.has(entry.name) || entry.name.endsWith('.app') || entry.name.startsWith('.conda') || entry.name.startsWith('.venv') || entry.name === 'site-packages' || entry.name.startsWith('DataBrain-ChatGPT-Installer-')) continue;
         if (['moc', 'app-content', '.databrain'].includes(entry.name) && await isBrainGeneratedFolder(candidate, entry.name)) continue;   // a DataBrain's generated folders are never indexed
         const pieces = path.relative(root, candidate).split(path.sep);
         if (pieces.some((piece, index) => piece === 'Resources' && pieces[index + 1] === 'Sensitive')) continue;
@@ -100,6 +102,8 @@ export async function scanSelectedFiles({ roots }) {
         if (path.basename(root) === 'NewBrain' && ['moc', 'bin', 'catalog'].includes(entry.name) && directory === root) continue;
         await walk(candidate, root);
       } else if (entry.isFile() && indexedExtensions.has(path.extname(entry.name).toLowerCase())) {
+        // ChatGPT's own per-chat output (ChatGPT host only, DATABRAIN_SKIP_CODEX_OUTPUT=1) is not the user's notes, except the .txt and .md notes it saves when asked (part 26)
+        if (skipCodexOutput && inside(candidate, codexOutputFolder()) && !['.txt', '.md'].includes(path.extname(entry.name).toLowerCase())) continue;
         files.add(candidate);
       }
     }
@@ -148,7 +152,7 @@ const touchedOnly = (expected, actual) => {
 // when a sync touched 6,000 files.
 async function settleSame(items, roots, datalessAmong) {
   const touched = items.filter(({ expected, actual }) => touchedOnly(expected, actual));
-  const cloudOnly = touched.length ? datalessAmong(touched.map(item => item.file)) : new Set();
+  const cloudOnly = touched.length ? await datalessAmong(touched.map(item => item.file)) : new Set();
   const result = new Map();
   for (const item of items) result.set(item.file, await sameSource(item.file, item.expected, item.actual, roots, cloudOnly));
   return result;
@@ -191,7 +195,7 @@ export async function captureFreshnessBaseline({ roots, indexText, home = os.hom
     else if (metadata) needDigest.push(entry);
     entries.push(entry);
   }
-  const cloudOnly = needDigest.length ? datalessAmong(needDigest.map(entry => entry.file)) : new Set();
+  const cloudOnly = needDigest.length ? await datalessAmong(needDigest.map(entry => entry.file)) : new Set();
   const toRead = needDigest.filter(entry => !cloudOnly.has(entry.file));
   for (let start = 0; start < toRead.length; start += 8) {
     await Promise.all(toRead.slice(start, start + 8).map(async entry => { entry.digest = await contentDigest(entry.file, approved, entry.metadata) ?? '-'; }));
@@ -282,4 +286,44 @@ export async function flagChangedDuring({ baselineText, startedAt, finishedAt })
     return line;
   }));
   return { text: lines.join('\n'), flagged };
+}
+
+// ---- Part 19 (0.2.1): files the ingest pass leaves out ----
+// Part 19 (0.2.1): a file the ingest pass leaves out ("1 file(s) left out, retried next pass") was counted as "added" by every freshness check, so the
+// index looked stale again after each refresh and another refresh started, back to back (real Mac, 2026-11-16: five refreshes in four minutes).
+// A file left out twice in a row with the SAME size and modification time has a failure that retrying does not cure: it is parked, so it no longer makes
+// the index stale, and it is tried again the moment its size or modification time changes. A file left out once (a real change while it was read) is not parked.
+
+
+const LEFT_OUT_LIMIT = 2;
+const leftOutFingerprint = async file => { try { const info = await fs.stat(file); return `${info.size}:${Math.round(info.mtimeMs)}`; } catch { return null; } };
+
+export async function readLeftOut(filePath) {
+  try { const parsed = JSON.parse(await fs.readFile(filePath, 'utf8')); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
+}
+
+/** After a pass: add one to the count of every file left out again with the same fingerprint, start at 1 for a new or changed one. */
+export async function recordLeftOut(filePath, files) {
+  const map = await readLeftOut(filePath);
+  for (const file of files) {
+    const fp = await leftOutFingerprint(file);
+    if (!fp) { delete map[file]; continue; }
+    map[file] = map[file]?.fp === fp ? { fp, count: Math.min((map[file].count || 0) + 1, 99) } : { fp, count: 1 };
+  }
+  const temp = `${filePath}.${process.pid}.tmp`;
+  await fs.writeFile(temp, JSON.stringify(map), { mode: 0o600 });
+  await fs.rename(temp, filePath);
+  return map;
+}
+
+/** Of these files, the ones parked right now: left out LIMIT times in a row and unchanged since. */
+export async function parkedAmong(filePath, files) {
+  const map = await readLeftOut(filePath);
+  const parked = new Set();
+  for (const file of files) {
+    const entry = map[file];
+    if (!entry || (entry.count || 0) < LEFT_OUT_LIMIT) continue;
+    if (entry.fp === await leftOutFingerprint(file)) parked.add(file);
+  }
+  return parked;
 }

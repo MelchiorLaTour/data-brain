@@ -78,6 +78,7 @@ NB_SELF="${ROOT:-$HOME/Claude/NewBrain}"
 PRUNE_DIRS=(
   \( -type d \( -path '*/Resources/Sensitive' -o -name node_modules -o -name .git \
     -o -name .obsidian -o -name .planning -o -name .venv -o -name venv \
+    -o -name '.conda*' -o -name '.venv*' -o -name site-packages -o -name 'DataBrain-ChatGPT-Installer-*' \
     -o -name __pycache__ -o -name .cache -o -name Library -o -name '*.app' \
     -o -name dist -o -name build -o -name .claude -o -name worktrees \
     -o -name .ssh -o -name .gnupg -o -name .aws \
@@ -91,6 +92,25 @@ PRUNE_DIRS=(
 # never indexed or searched: PRUNE_DIRS stops the walk at them, and nb_in_brain_moc answers the same question for a single path. A brain is
 # recognised by .databrain/desktop-state.json beside the folder, or (for moc/) by an index.tsv or fts.db inside it. Any other folder with one
 # of these names is an ordinary folder.
+# Python environment folders (a name starting .conda or .venv, or site-packages) and the unzipped DataBrain installer (DataBrain-ChatGPT-Installer-*) hold program files, never notes. One path: is it inside one?
+# Part 26: only files that are not .txt or .md count as ChatGPT's own output. Used by prune-missing.sh so a brain that indexed such files before this rule drops them on its next refresh.
+nb_in_python_env() {
+  case "$1" in */.conda*/*|*/.venv*/*|*/venv/*|*/site-packages/*|*/DataBrain-ChatGPT-Installer-*/*) return 0 ;; esac
+  return 1
+}
+# ChatGPT writes its own per-chat output (code, scratch files, drafts) into ~/Documents/Codex. That is not the user's notes. The ChatGPT host sets
+# DATABRAIN_SKIP_CODEX_OUTPUT=1 for the engine; the Claude host does not (0.1.48 is published and its behaviour stays as shipped). One path: is it inside that folder?
+# Used by prune-missing.sh so a brain that indexed such files before this rule drops them on its next refresh.
+nb_in_codex_output() {
+  [ "${DATABRAIN_SKIP_CODEX_OUTPUT:-}" = 1 ] || return 1
+  case "$1" in
+    "$HOME/Documents/Codex"/*)
+      # part 26: ChatGPT saves the notes it is asked to keep there as .txt or .md, so those two stay indexed; code, images and other scratch stay out
+      case "$1" in *.[tT][xX][tT]|*.[mM][dD]) return 1 ;; esac
+      return 0 ;;
+  esac
+  return 1
+}
 nb_in_brain_moc() {
   local d base
   d="$(dirname -- "$1")"
@@ -106,6 +126,7 @@ PRUNE_FIND=(
   -not -path '*/Resources/Sensitive/*'
   -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/.obsidian/*'
   -not -path '*/.planning/*' -not -path '*/.venv/*' -not -path '*/venv/*'
+  -not -path '*/.conda*/*' -not -path '*/.venv*/*' -not -path '*/site-packages/*' -not -path '*/DataBrain-ChatGPT-Installer-*/*'   # Python environments and the unzipped DataBrain installer: program files, not notes
   -not -path '*/__pycache__/*' -not -path '*/.cache/*' -not -path '*/Library/*'
   -not -path '*.app/*' -not -path '*/dist/*' -not -path '*/build/*'
   -not -path '*/.claude/*' -not -path '*/worktrees/*'         # per-project Claude scaffolding + git worktrees
@@ -123,6 +144,7 @@ PRUNE_RG=(
   --glob '!**/Resources/Sensitive/**'
   --glob '!**/node_modules/**' --glob '!**/.git/**' --glob '!**/.obsidian/**'
   --glob '!**/.planning/**' --glob '!**/.venv/**' --glob '!**/venv/**'
+  --glob '!**/.conda*/**' --glob '!**/.venv*/**' --glob '!**/site-packages/**' --glob '!**/DataBrain-ChatGPT-Installer-*/**'
   --glob '!**/__pycache__/**' --glob '!**/.cache/**' --glob '!**/Library/**'
   --glob '!**/*.app/**' --glob '!**/dist/**' --glob '!**/build/**'
   --glob '!**/.claude/**' --glob '!**/worktrees/**'
@@ -139,7 +161,7 @@ PRUNE_RG=(
 # Google Drive, Dropbox: Apple's File Provider marks them). Indexing never reads them, because reading downloads them. NB_TEST_DATALESS_LIST
 # (a file of paths) lets tests simulate them; real detection uses the same flag text as `ls -lO`.
 nb_dataless_paths() {
-  if [ -n "${NB_TEST_DATALESS_LIST:-}" ]; then grep -Fxf "$NB_TEST_DATALESS_LIST" 2>/dev/null || true; return 0; fi
+  if [ -n "${NB_TEST_DATALESS_LIST:-}" ]; then /usr/bin/awk 'NR == FNR { want[$0] = 1; next } ($0 in want)' "$NB_TEST_DATALESS_LIST" - 2>/dev/null || true; return 0; fi
   tr '\n' '\0' | xargs -0 stat -f '%Sf%t%N' 2>/dev/null | awk -F'\t' '$1 ~ /dataless/ { print substr($0, length($1) + 2) }'
 }
 
@@ -296,6 +318,14 @@ copy_approved_source() {
 # Read only a Markdown file's first frontmatter block from a verified descriptor.
 # The path is checked before and after open/read; a replacement or outside symlink
 # leaves the caller with no metadata to index.
+# 0 when two fingerprints (inode:size:mtime:ctime) differ ONLY in ctime. iCloud moves ctime when a download finishes or a file is
+# evicted, with the same inode, size and mtime; any other difference is a real change or swap. read_approved_frontmatter returns 3
+# for the ctime-only case so callers may re-read once; 2 stays "changed or unsafe: never index".
+nb_fp_ctime_only() {
+  local a="$1" b="$2"
+  [ -n "$a" ] && [ -n "$b" ] && [ "$a" != "$b" ] && [ "${a%:*}" = "${b%:*}" ]
+}
+
 read_approved_frontmatter() {
   local file="$1" tmp before opened after_fd after_path first line count=0 closed=0
   is_approved_source_file "$file" || return 2
@@ -309,6 +339,7 @@ read_approved_frontmatter() {
   if [ "$opened" != "$before" ] || ! is_approved_source_file "$file"; then
     exec 9<&-
     rm -f "$tmp"
+    nb_fp_ctime_only "$before" "$opened" && is_approved_source_file "$file" && return 3
     return 2
   fi
   IFS= read -r first <&9 || first=''
@@ -326,6 +357,17 @@ read_approved_frontmatter() {
   if [ "$opened" != "$after_fd" ] || [ "$opened" != "$after_path" ] || \
       [ "$closed" -ne 1 ] && [ "$first" = '---' ] || ! is_approved_source_file "$file"; then
     rm -f "$tmp"
+    if [ "$opened" != "$after_fd" ] || [ "$opened" != "$after_path" ]; then
+      { [ "$opened" = "$after_fd" ] || nb_fp_ctime_only "$opened" "$after_fd"; } && \
+        { [ "$opened" = "$after_path" ] || nb_fp_ctime_only "$opened" "$after_path"; } && \
+        is_approved_source_file "$file" && return 3
+    fi
+    # Part 19: the file did NOT change while it was read, its frontmatter simply never closed within the lines read (a long block such as a downloaded
+    # model card's metadata, or an opening --- with no closing one). That is a note with no usable tags, not a failure: report no frontmatter. Before this, such a
+    # file was left out of every ingest pass forever (the index looked stale again after each refresh) and stopped the full index build (build-index.sh exit 2).
+    if [ "$opened" = "$after_fd" ] && [ "$opened" = "$after_path" ] && [ "$closed" -ne 1 ] && [ "$first" = '---' ] && is_approved_source_file "$file"; then
+      return 0
+    fi
     return 2
   fi
   cat "$tmp"
@@ -354,6 +396,7 @@ selected_root_find0() {
         exit 2
         ;;
       esac
+      nb_in_codex_output "$selected_root/${entry#./}" && continue   # ChatGPT's own output folder (ChatGPT host only): the walk sees relative paths, so this is checked on the full one
       printf '%s/%s\0' "$selected_root" "${entry#./}"
     done
     find_status=$?

@@ -15,7 +15,10 @@ import { sqlite, stagePackage } from './mcp-harness-gaps.mjs';
 
 const { temp, home, docs, dataHome, statePath } = await fakeHome('upgrade-privacy');
 const oldServer = await stagePackage('0.1.37', path.join(temp, 'pkg-old'));
-let newServer = process.env.DATABRAIN_UNDER_TEST || await stagePackage(process.env.UPGRADE_VERSION || '0.1.41', path.join(temp, 'pkg-new'));
+// The package under test must be one that has the fix for the scenario: the start trigger arrived in 0.1.42, the stage and refresh gates in 0.1.43. The old default
+// (0.1.41) predates all three, so it always failed; it stays reachable through UPGRADE_VERSION as the "before the fix" control.
+const defaultUnderTest = (process.env.SCENARIO || 'start') === 'start' ? '0.1.42' : '0.1.43';
+let newServer = process.env.DATABRAIN_UNDER_TEST || await stagePackage(process.env.UPGRADE_VERSION || defaultUnderTest, path.join(temp, 'pkg-new'));
 if (process.env.UPGRADE_MUTANT) {
   const copy = path.join(temp, 'mutant');
   await fs.cp(path.resolve(path.dirname(newServer), '..', '..'), copy, { recursive: true });

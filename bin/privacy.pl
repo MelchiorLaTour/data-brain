@@ -115,6 +115,10 @@ sub nir_ok {
 
 # The whole text is screened, in windows of 400000 characters that overlap by 10000 (so a number cut by a window edge is still seen):
 # databrain_read can reach the end of a long file, so text past the first window must not escape the screen.
+# Part 16: the lists behind the "several signs together" rule (accent-folded, lower case, matched as whole words).
+our $STATEMENT_WORDS = join '|', 'statements?', 'checking', 'savings', 'balances?', 'deposits?', 'withdrawals?', 'debits?', 'overdrafts?', 'transactions?', 'routing', 'releves?', 'solde', 'virements?', 'decouverts?', 'prelevements?';
+our $BANK_NAMES = join '|', 'chase', 'jpmorgan', 'bank of america', 'wells fargo', 'citibank', 'capital one', 'us bank', 'u\.s\. bank', 'pnc', 'td bank', 'hsbc', 'barclays', 'lloyds', 'natwest', 'monzo', 'santander', 'revolut', 'n26', 'ally bank', 'discover bank', 'charles schwab', 'bnp', 'bnp paribas', 'societe generale', 'credit agricole', 'credit mutuel', 'caisse d epargne', 'la banque postale', 'lcl', 'boursorama', 'deutsche bank', 'credit suisse', 'ubs';
+
 sub content_reason {
   my ($text) = @_;
   $text = decode('UTF-8', $text, Encode::FB_DEFAULT) unless utf8::is_utf8($text);
@@ -169,6 +173,61 @@ sub content_reason_window {
       $other =~ s/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/ /g;
       return 'contains a password' if $other =~ /(?<![a-z0-9])(?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{6,16}(?![a-z0-9])/;
     }
+  }
+  # Part 16b: secrets that must never reach a model. Each rule below holds the file on its own (the file is held for the user's review, never
+  # excluded automatically). $f is lower case with accents removed. Labels are English and French.
+  # 1. a password-like word followed by "is"/"was"/"est" and a value ("the wifi password is sunshine"), unless the next word only talks ABOUT passwords
+  if ($f =~ /\b(?:password|passcode|passphrase|pass phrase|passwd|pw|pwd|pin|mot de passe|mdp|code pin|mot de passe wifi|cle wifi)[ \t]+(?:is|was|est|etait|=)[ \t]+(\S+)/) {
+    my $word = $1; $word =~ s/[^a-z0-9]+$//;
+    return 'contains a password' unless $word =~ /\A(?:required|too|not|invalid|incorrect|wrong|stored|hashed|encrypted|case|sensitive|expired|changed|reset|saved|set|used|a|an|the|your|my|empty|blank|missing|valid|weak|strong|long|short|secure|safe|private|hidden|shown|visible|obligatoire|trop|invalide|incorrect|faux|stocke|chiffre|expire|change|vide|un|une|le|la|votre|mon|ma)\z/;
+  }
+  # 2. short and long password labels with a value: pw, passphrase, secret, api key, token, client secret, access key ... (value of 6+ characters, no spaces
+  #    needed for a key; a passphrase may be several words)
+  for my $line (@lines) {
+    return 'contains a password' if $line =~ /\b(?:pw|pwd|passphrase|pass phrase|passcode|passwd|mot de passe|mdp|phrase secrete|phrase de passe|code secret|code d acces)[ \t]*[:=][ \t]*\S{3,}/;
+    return 'contains an access key or token' if $line =~ /\b(?:api[ _-]?key|apikey|api[ _-]?secret|secret[ _-]?key|client[ _-]?secret|access[ _-]?key|access[ _-]?token|auth[ _-]?token|refresh[ _-]?token|bearer[ _-]?token|private[ _-]?token|token|cle api|cle secrete|jeton)[ \t]*[:=][ \t]*["']?[a-z0-9_\-\.\/+=]{8,}/;
+  }
+  # 3. well-known token shapes, with or without a label (matched on the original text, case kept)
+  return 'contains an access key or token'
+    if $text =~ /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/ || $text =~ /\bgh[pousr]_[A-Za-z0-9]{20,}\b/ || $text =~ /\bgithub_pat_[A-Za-z0-9_]{20,}\b/
+    || $text =~ /\bsk-(?:live-|test-|proj-|ant-)?[A-Za-z0-9_\-]{16,}\b/ || $text =~ /\bxox[abprs]-[A-Za-z0-9\-]{10,}\b/ || $text =~ /\bAIza[0-9A-Za-z_\-]{30,}\b/
+    || $text =~ /\bglpat-[A-Za-z0-9_\-]{16,}\b/ || $text =~ /\bnpm_[A-Za-z0-9]{30,}\b/
+    || $text =~ /\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{5,}/ || $text =~ /\bBearer[ \t]+[A-Za-z0-9._~+\/\-]{20,}=*/;
+  # 4. a recovery (seed) phrase: its label, then a colon or an equals sign, then 12 or more short lower-case words in a row
+  return 'contains a recovery phrase'
+    if $f =~ /\b(?:seed phrase|seed words|recovery phrase|recovery words|mnemonic|secret recovery phrase|phrase de recuperation|phrase secrete|mots de recuperation)[ \t]*[:=][ \t]*\n?[ \t]*(?:\d{1,2}[.)]?[ \t]*)?(?:[a-z]{3,8}(?:[ \t,\n]+(?:\d{1,2}[.)]?[ \t]*)?|\z)){11,}[a-z]{3,8}\b/;
+  # 5. US social security number with its label
+  return 'contains a social security number'
+    if $f =~ /\b(?:ssn|social security(?: number| no\.?)?|numero de securite sociale|n° de securite sociale|numero de secu)\W{0,12}\d{3}[ -]?\d{2}[ -]?\d{4}\b/;
+  # 6. passport, driving licence and ID numbers with their label (an optional "number" word between the label and the value)
+  return 'contains a passport or ID number'
+    if $f =~ /\b(?:passport|passeport|driver'?s? licen[sc]e|driving licen[sc]e|permis de conduire|id number|identity card|carte d identite|national id|numero de piece)(?:[ \t]+(?:number|no\.?|num|numero|n°|#))?[^a-z0-9]{0,25}(?=[a-z0-9]*\d)[a-z0-9]{6,12}\b/;
+  # 7. a bank account or routing number with its label: ONE sign is enough
+  return 'contains an account or routing number'
+    if $f =~ /\b(?:account|acct|compte|routing|aba|rib)[ \t]*(?:number|no\.?|num(?:ber|ero)?|#|n°)?[ \t]*[:=#]?[ \t]*\d[\d -]{6,}\d/;
+  # 8. answers to security questions
+  return 'contains security answers'
+    if $f =~ /\b(?:security|secret|verification)[ \t]+(?:question[ \t]+)?answers?[ \t]*[:=][ \t]*\S{2,}/
+    || ($f =~ /\b(?:security|secret|verification) questions?|question (?:secrete|de securite)/ && $f =~ /\b(?:answer|reponse)[ \t]*[:=][ \t]*\S{2,}/);
+  # 9. two-factor backup or recovery codes: the label, then at least two code-like groups
+  return 'contains backup codes'
+    if $f =~ /\b(?:(?:backup|recovery|reset|2fa|one-time|otp|emergency)[ \t]+codes?|codes?[ \t]+de[ \t]+(?:secours|recuperation|sauvegarde))[ \t]*[:=][ \t]*\n?[ \t]*(?=[a-z0-9 \t,\n-]{0,200}\d)[a-z0-9]{4,10}(?:[ \t,\n-]+[a-z0-9]{4,10}){1,}/;
+  # Part 16: bank-statement and login SHAPES, held for the user's review (never excluded on their own). Several signs must appear TOGETHER; one sign alone
+  # is never enough, so a note that only mentions a bank, or a budget note with a few money words, stays searchable.
+  #   sign 1: an account or routing number with its label, or a masked card/account ending (xxxx1234)
+  #   sign 2: a bank name AND at least 2 distinct statement words
+  #   +1 more sign when the statement shape is strong: at least 2 bank-name mentions AND at least 4 distinct statement words
+  #   sign 3: login fields: a user label AND a password label (a value is not needed)
+  # Held when 2 or more signs. The word and bank lists are here so they can be reviewed: STATEMENT_WORDS, BANK_NAMES.
+  {
+    my $signs = 0;
+    $signs++ if $f =~ /(?:x{3,}|\*{3,}|\x{2022}{3,})\s?\d{4}\b/;   # a masked ending (xxxx1234); a labelled account or routing number holds on its own (rule 7 above)
+    my %stmt; while ($f =~ /\b($STATEMENT_WORDS)\b/g) { (my $word = $1) =~ s/s$//; $stmt{$word} = 1; }   # statement and statements are one word
+    my $banks = () = $f =~ /\b(?:$BANK_NAMES)\b/g;
+    $signs++ if $banks >= 1 && keys(%stmt) >= 2;
+    $signs++ if $banks >= 2 && keys(%stmt) >= 4;
+    $signs++ if $f =~ /\b(?:user ?name|login|e-?mail|identifiant|user ?id)\s*[:=]/ && $f =~ /\b(?:password|passcode|passwd|mot de passe)\s*[:=]/;
+    return 'looks like a bank statement or login details (several signs together)' if $signs >= 2;
   }
   return 'contains a passport or ID number'
     if $f =~ /(?:passport|passeport|id number|identity card|carte d identite|national id|numero de piece)[^a-z0-9]{0,25}(?=[a-z0-9]*\d)[a-z0-9]{6,9}\b/;

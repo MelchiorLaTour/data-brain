@@ -56,7 +56,7 @@ else { console.error('unexpected script'); process.exit(4); }
 const dataHome = path.join(home, 'DataBrain');
 let n = 0;
 function startServer() {
-  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', realApps, realDocs], { env: { ...process.env, HOME: home, DATABRAIN_TEST_APP_DIRS: appsDir, DATABRAIN_TEST_APP_RECENT_MS: '0', DATABRAIN_TEST_APP_OSASCRIPT: stub, ROWS_DIR: temp, DATABRAIN_FRESHNESS_CHECK_MS: '100', DATABRAIN_TEST_FRESH_CAP_MS: '12000', DATABRAIN_TEST_APP_GRACE_MS: '2000', DATABRAIN_TEST_STATUS_WAIT_MS: '1000' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', realApps, realDocs], { env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, DATABRAIN_TEST_APP_DIRS: appsDir, DATABRAIN_TEST_APP_RECENT_MS: '0', DATABRAIN_TEST_APP_OSASCRIPT: stub, ROWS_DIR: temp, DATABRAIN_FRESHNESS_CHECK_MS: '100', DATABRAIN_TEST_FRESH_CAP_MS: '12000', DATABRAIN_TEST_APP_GRACE_MS: '2000', DATABRAIN_TEST_STATUS_WAIT_MS: '1000' }, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map();
   readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
   const ask = (method, params) => new Promise(resolve => { const id = ++n; waiting.set(id, resolve); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });

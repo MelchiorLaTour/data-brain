@@ -26,7 +26,12 @@ pruned=0
     path="${line%%$'\t'*}"
     real="${path/#\~/$HOME}"
     drop=0
-    if [ ! -e "$real" ] && [ ! -L "$real" ]; then
+    if nb_in_python_env "$real" || nb_in_codex_output "$real"; then
+      # indexed before Python environment folders (or ChatGPT's own output folder) were skipped: drop the row (the file itself is never touched)
+      for root in "${CANON[@]}"; do
+        case "$real" in "$root"/*) [ -d "$root" ] && drop=1; break ;; esac
+      done
+    elif [ ! -e "$real" ] && [ ! -L "$real" ]; then
       parent="${real%/*}"
       if [ ! -e "$parent" ] || [ -x "$parent" ]; then
         for root in "${CANON[@]}"; do
@@ -43,6 +48,6 @@ pruned=0
 if [ "$pruned" -gt 0 ]; then
   chmod "$(stat -f '%Lp' "$INDEX" 2>/dev/null || echo 600)" "$TMP"
   mv -f "$TMP" "$INDEX"
-  printf '## [%s] prune-missing | %s row(s) removed (files gone)\n' "$(date '+%Y-%m-%d %H:%M')" "$pruned" >> "$MOC/log.md"
+  printf '## [%s] prune-missing | %s row(s) removed (files gone or in skipped folders)\n' "$(date '+%Y-%m-%d %H:%M')" "$pruned" >> "$MOC/log.md"
 fi
 echo "prune-missing: $pruned row(s) removed"

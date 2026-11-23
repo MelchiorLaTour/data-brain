@@ -48,6 +48,7 @@ if [ -n "$LISTED" ]; then
     case "$p" in *$'\n'*|*$'\r'*|*$'\t'*) continue ;; esac
     [ -f "$p" ] && [ ! -L "$p" ] && is_approved_source_path "$p" || continue
     nb_in_brain_moc "$p" && continue
+    nb_in_codex_output "$p" && continue
     rels+=("./${p#"$SRC"/}")
   done < "$LISTED"
   : > "$relative"
@@ -81,6 +82,7 @@ fi
 comm -23 "$tmpd/candidates" "$tmpd/kept" > "$dropped"
 
 added=0; skipped=0; unsafe=0
+: > "$MOC/ingest-skipped.tsv"
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   if grep -qxF "$f" "$existing"; then skipped=$((skipped + 1)); continue; fi
@@ -94,11 +96,15 @@ while IFS= read -r f; do
     # A Markdown file this Mac will not let us read (permission, or gone since the walk) is left out, not fatal: the inventory reports
     # it as unreadable. Only a file that changes identity while being read still stops the commit.
     [ -r "$f" ] || continue
-    fm="$(read_approved_frontmatter "$f")" || {
-      echo 'ingest-root: a source changed before its frontmatter could be read; no new rows were committed' >&2
+    # One file that changes while it is read must not stop the pass: only that file is left out (no row, its content never used) and
+    # picked up by the next pass. If only its ctime moved (iCloud finishing a download), it is read once more first.
+    fm="$(read_approved_frontmatter "$f")"; fm_rc=$?
+    if [ "$fm_rc" -eq 3 ]; then fm="$(read_approved_frontmatter "$f")"; fm_rc=$?; fi
+    if [ "$fm_rc" -ne 0 ]; then
+      printf '%s\tchanged while being read\n' "$f" >> "$MOC/ingest-skipped.tsv"
       unsafe=$((unsafe + 1))
       continue
-    }
+    fi
     k="$(printf '%s\n' "$fm" | sed -n 's/^tags:[[:space:]]*\[\(.*\)\].*$/\1/p' | head -1 \
           | tr ',' '\n' | sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//' \
           | grep -viE '^(user)$' | grep -vE '^[0-9]{4}$' | paste -sd, -)"
@@ -108,7 +114,7 @@ while IFS= read -r f; do
   added=$((added + 1))
 done < "$found"
 
-if [ "$unsafe" -gt 0 ]; then exit 2; fi
+if [ "$unsafe" -gt 0 ]; then echo "ingest-root: left out $unsafe file(s) that changed while being read; they are retried on the next pass (list: ingest-skipped.tsv)" >&2; else rm -f "$MOC/ingest-skipped.tsv"; fi
 if [ -s "$new_rows" ]; then
   staged_index="$tmpd/index.tsv"
   cp -p "$INDEX" "$staged_index" || { echo 'ingest-root: could not stage the existing index' >&2; exit 2; }

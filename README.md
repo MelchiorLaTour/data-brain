@@ -9,7 +9,7 @@ terminal engine uses bash and sqlite FTS5 without a model call or network connec
 
 **What DataBrain will not read:**
 
-- Folders named `Resources/Sensitive`, `.git`, `node_modules`, `.obsidian`, `.ssh`, `.gnupg` and `.aws`, and any file that is not `.md`, `.txt`, `.pdf`, `.docx`, `.doc`, `.pages` or `.rtf`.
+- Folders named `Resources/Sensitive`, `.git`, `node_modules`, `.obsidian`, `.ssh`, `.gnupg`, `.aws`, Python environment folders (names starting with `.conda` or `.venv`, and `site-packages`), the unzipped DataBrain installer folder, and any file that is not `.md`, `.txt`, `.pdf`, `.docx`, `.doc`, `.pages` or `.rtf`.
 - Names are checked first, then text is checked on your Mac. Nothing is sent.
 - Anything that looks private is held back until you say it is fine: taxes, bank, ID, medical, payslips, passwords, keys, contracts, in English and French, and any text with an IBAN, card number, social security number or private key.
 - Scanned images such as `IMG_2231.jpg` are not checked.
@@ -27,7 +27,7 @@ This section should look somewhat like this:
 ![The Configure DataBrain window. Under Folders DataBrain can read there are four rows: /Applications, /Users/User/Downloads, /Users/User/Desktop and /Users/User/Documents, each with a folder icon and an X, then an Add directory button, and Cancel and Save at the bottom. Your own user name appears instead of User.](Mac%20download/Claude%20app/configure-example.png)  
 8 → Click **Save**. Then click the **Disabled** switch so it reads **Enabled**, and close the window with the **X** at the top right. (Click Save first: once the switch reads **Enabled**, there is no Save button to click.)  
 9 → Check that DataBrain loaded. Close Settings completely, then open **Claude → Settings… → Extensions** again: **DataBrain** should be listed. Then open a new chat, click the **+** sign in the message box, click **Connectors**, and check that **DataBrain** is switched on. (You may need to scroll through your connectors.) [CHECK]  
-10 → In a new chat, send this message: `Set up my DataBrain` (Claude shows you the folders DataBrain will read, in the chat. Check each one, then say **yes**. If a folder is wrong, say **no**, open **Claude → Settings… → Extensions → DataBrain → Configure** [CHECK], remove it with its X, then send the message again. Claude may list files that look private and ask which are fine to index. If you are not sure, say **none**. When Claude asks to use DataBrain, we recommend **Always allow**: people approve almost every permission prompt anyway, [Anthropic found 93% of prompts are approved](https://www.anthropic.com/engineering/claude-code-auto-mode). [CHECK])  
+10 → In a new chat, send this message: `Set up my DataBrain` (Claude shows you the folders DataBrain will read, in the chat. Check each one, then say **yes**. If a folder is wrong, say **no**, open **Claude → Settings… → Extensions → DataBrain → Configure** [CHECK], remove it with its X, then send the message again. Claude may tell you that some files are private and cannot be accessed. It never says which. To see them, open **Private files review.txt** in your DataBrain folder (**Finder → Go → Home**), change **keep: no** to **keep: yes** on the line of any file that is fine to index, save the file, and tell Claude: **I reviewed my private files**. If you are not sure, do nothing: every file stays private. When Claude asks to use DataBrain, we recommend **Always allow**: people approve almost every permission prompt anyway, [Anthropic found 93% of prompts are approved](https://www.anthropic.com/engineering/claude-code-auto-mode). [CHECK])  
 11 → When your Mac asks to let Claude access your Desktop or Documents folder, click **OK** (or **Allow**). (It can appear while Claude sets up. Documents, Desktop, Downloads, iCloud Drive, and external drives each ask once.) [CHECK]  
 12 → When Claude says DataBrain is set up, tell Claude how to use it: open **Claude → Settings…**, click **Account** in the left list, and find the big text box named **Instructions for Claude** at the bottom of the **Profile** section. If the box already has text, keep all unrelated instructions. Replace any older DataBrain instruction with this line; if none is present, click at the end of the text, press **Return** twice, then paste it. If the box is empty, just paste it:  
 `For ANY question about me (I, my, me, my life, work, hobbies, plans, or anything I keep or wrote), call databrain_search FIRST, even when general knowledge could answer it; general knowledge is not "memory". Start the answer with "From your files:" and where it comes from; if the answer does not come from DataBrain, start with "From general knowledge:". If DataBrain finds nothing, say so before falling back.`  
@@ -41,6 +41,19 @@ To remove DataBrain: **Claude → Settings… → Extensions**, then on the **Da
 
 Files kept in iCloud, OneDrive, Google Drive and Dropbox have not been tested yet. The terminal route for Claude Code is in [INSTALL.md](INSTALL.md); test status is in the [acceptance ledger](setup/ACCEPTANCE.md).
 
+## Download for the ChatGPT app (macOS, pre-release)
+
+Needs the ChatGPT desktop app with a Plus plan or higher, on a Mac with an Apple chip. Not yet tested start to finish in the ChatGPT app.
+
+1. Turn off **Improve the model for everyone** (ChatGPT → Settings… → Data controls). We recommend it: consumer ChatGPT plans train on chats by default, and the passages DataBrain returns to answer you become part of your chat. DataBrain does not change this setting itself.
+2. Download **DataBrain-ChatGPT-Installer-0.2.1.zip**: on GitHub open the **data-brain** page, then the **Mac download** folder, then **ChatGPT app**, and click the **download link in the heading** ("Click here to download ..."). Clicking the file name in the list only opens a preview page. Direct link: [DataBrain-ChatGPT-Installer-0.2.1.zip](https://github.com/MelchiorLaTour/data-brain/raw/main/Mac%20download/ChatGPT%20app/DataBrain-ChatGPT-Installer-0.2.1.zip).
+3. Open it and double-click **Install DataBrain for ChatGPT**. Your Mac blocks it once because it is not signed with a paid Apple certificate: open **System Settings → Privacy & Security**, click **Open Anyway**, and confirm.
+4. Restart ChatGPT, then type **Set up my DataBrain**. A box in the chat lets you tick the folders to read; your click on **Accept** is your yes.
+
+Your files stay on your Mac. DataBrain has no cloud server and stores nothing of yours. On ChatGPT, only the query and the snippets needed to answer it are sent to OpenAI's model.
+
+The full step-by-step guide, with what DataBrain will not read and how to fix problems, is [Mac download/ChatGPT app/databrain-chatgpt-guide.html](Mac%20download/ChatGPT%20app/databrain-chatgpt-guide.html). The installer copies DataBrain to `~/Library/Application Support/DataBrain/app/` and adds one `databrain` entry to `~/.codex/config.toml` after saving a copy of that file. It never opens your documents.
+
 ## Compatibility
 
 The terminal setup targets Claude Code on macOS. A separate Claude Desktop extension is
@@ -50,6 +63,8 @@ setup flow, tests, and current limits are described in
 the older terminal integration; use the acceptance ledger above for the extension's status.
 
 ### OpenAI clients
+
+The ChatGPT app has its own download and guide: see **Download for the ChatGPT app** above. The paragraph below describes an older, separate Codex route.
 
 The intended novice route is to paste [this repository link](https://github.com/MelchiorLaTour/data-brain)
 into ChatGPT desktop's Codex view and ask it to download and set up DataBrain. **That route

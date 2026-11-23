@@ -65,7 +65,7 @@ else { console.error('unexpected script'); process.exit(4); }
 const dataHome = path.join(home, 'DataBrain');
 let n = 0;
 function startServer() {
-  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', realApps, realDocs], { env: { ...process.env, HOME: home, DATABRAIN_TEST_APP_DIRS: appsDir, DATABRAIN_TEST_APP_RECENT_MS: '0', DATABRAIN_TEST_APP_OSASCRIPT: stub, ROWS_DIR: temp, DELAY_FILE: delayFile, DATABRAIN_FRESHNESS_CHECK_MS: '100', DATABRAIN_TEST_FRESH_CAP_MS: '6000', DATABRAIN_TEST_STATUS_WAIT_MS: '1000' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', realApps, realDocs], { env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, DATABRAIN_TEST_APP_DIRS: appsDir, DATABRAIN_TEST_APP_RECENT_MS: '0', DATABRAIN_TEST_APP_OSASCRIPT: stub, ROWS_DIR: temp, DELAY_FILE: delayFile, DATABRAIN_FRESHNESS_CHECK_MS: '100', DATABRAIN_TEST_FRESH_CAP_MS: '6000', DATABRAIN_TEST_STATUS_WAIT_MS: '1000' }, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map();
   readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
   const ask = (method, params) => new Promise(resolve => { const id = ++n; waiting.set(id, resolve); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });
@@ -107,7 +107,8 @@ try {
   await sleep(400);
   const statusCall = await timed(() => server.tool('databrain_setup_status'));
   assert(statusCall.ms < 2500, `a status report does not wait for the slow check: ${statusCall.ms} ms`);
-  assert(statusCall.value.startsWith('Freshness: New changes are being added'), `the status says in one fact that changes are being added:\n${statusCall.value.slice(0, 200)}`);
+  // part 12: a date check that has not answered yet is not a change, so the status carries no "being added" sentence (it was false on every first question of a minute)
+  assert(!/New changes are being added/.test(statusCall.value), `a routine check still in flight gives no "being added" sentence:\n${statusCall.value.slice(0, 200)}`);
   await sleep(200);
   const waiting = await timed(() => server.tool('databrain_search', { query: 'slowlateword' }));
   assert(/Datebook > Home > Third page/.test(waiting.value) && !/New changes are being added/.test(waiting.value), `a question that comes while the check runs waits for it and answers fresh:\n${waiting.value.slice(0, 400)}`);

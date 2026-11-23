@@ -7,6 +7,11 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
+// ChatGPT host: NOT APPLICABLE. This gate tests the Claude Desktop settings screen (the DataBrain parent folder and the source-folder list saved in the
+// extension's settings, with the brain placed under that parent). ChatGPT has no such settings: the brain is always in ~/DataBrain and the folders are
+// named in the chat. That behaviour is tested by test_chatgpt_state_location.mjs, test_chatgpt_folders_from_chat.mjs and test_chatgpt_picker.mjs.
+if (process.env.DATABRAIN_TEST_CLIENT === 'chatgpt') { console.log('NOT APPLICABLE on ChatGPT: Claude Desktop settings (DataBrain parent folder and the saved folder list); ChatGPT has no settings screen. Covered there by test_chatgpt_state_location, test_chatgpt_folders_from_chat and test_chatgpt_picker.'); process.exit(0); }
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverScript = process.env.DATABRAIN_SERVER || path.join(here, '../mcp/server.mjs');
 const engine = path.resolve(process.argv[2] || path.resolve(here, '../..'));

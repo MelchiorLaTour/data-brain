@@ -38,7 +38,7 @@ for (const name of ['Pokemon Uranium 1.2.5', 'Pokemon Uranium 1.2.5 2']) {
 await fs.writeFile(path.join(docs, 'plan.md'), '# Plan\ng39notesmarker ordinary note.\n');
 
 const run = serverPath => {
-  const child = spawn(process.execPath, [serverPath, '--databrain-source-roots', realApps, docs], { env: { ...process.env, HOME: home, DATABRAIN_TEST_APP_DIRS: realApps, DATABRAIN_FRESHNESS_CHECK_MS: '100' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [serverPath, '--databrain-source-roots', realApps, docs], { env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, DATABRAIN_TEST_APP_DIRS: realApps, DATABRAIN_FRESHNESS_CHECK_MS: '100' }, stdio: ['pipe', 'pipe', 'pipe'] });
   child.stderr.on('data', d => process.env.DBG && process.stderr.write(d));
   const waiting = new Map(); let n = 0;
   readline.createInterface({ input: child.stdout }).on('line', line => { try { const m = JSON.parse(line); waiting.get(m.id)?.(m); } catch {} });

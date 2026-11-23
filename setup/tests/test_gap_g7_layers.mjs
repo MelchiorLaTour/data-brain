@@ -58,7 +58,7 @@ else if (script.includes('// full read')) { log('full'); console.log(JSON.string
 else { console.error('unexpected script'); process.exit(4); }
 `, { mode: 0o755 });
   const run = (roots, extra = {}) => {
-    const child = spawn(process.execPath, [serverPath, '--databrain-source-roots', ...roots], { env: { ...process.env, HOME: home, DATABRAIN_TEST_APP_DIRS: realApps, DATABRAIN_TEST_APP_OSASCRIPT: stub, FIXTURE_A: fixture, CALL_LOG: calls, DATABRAIN_FRESHNESS_CHECK_MS: '100', DATABRAIN_TEST_FRESH_CAP_MS: '240000', ...extra }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, [serverPath, '--databrain-source-roots', ...roots], { env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, DATABRAIN_TEST_APP_DIRS: realApps, DATABRAIN_TEST_APP_OSASCRIPT: stub, FIXTURE_A: fixture, CALL_LOG: calls, DATABRAIN_FRESHNESS_CHECK_MS: '100', DATABRAIN_TEST_FRESH_CAP_MS: '240000', ...extra }, stdio: ['pipe', 'pipe', 'pipe'] });
     const waiting = new Map(); let n = 0;
     readline.createInterface({ input: child.stdout }).on('line', line => { try { const m = JSON.parse(line); waiting.get(m.id)?.(m); } catch {} });
     const ask = (method, params) => new Promise(resolve => { const id = ++n; waiting.set(id, resolve); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });

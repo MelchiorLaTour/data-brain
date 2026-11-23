@@ -22,11 +22,14 @@ const first = await fs.realpath(await fs.mkdir(path.join(home, 'Documents'), { r
 const second = await fs.realpath(await fs.mkdir(path.join(home, 'Projects', 'Thesis'), { recursive: true }).then(() => path.join(home, 'Projects', 'Thesis')));
 await fs.writeFile(path.join(first, 'old.md'), '# Old\noldfoldermarker is in the first folder.\n');
 await fs.writeFile(path.join(second, 'new.md'), '# New\naddedfoldermarker is in the folder added later.\n');
+// ChatGPT host: no settings list. The folders are named in the chat: databrain_setup_start / databrain_add_sources / databrain_select_sources take
+// `folders`, show the list first and change nothing until confirmed (server.mjs lines 1948-1960, 2756-2775, 1825-1827).
+const chatgpt = process.env.DATABRAIN_TEST_CLIENT === 'chatgpt';
 const statePath = path.join(home, 'DataBrain', '.databrain', 'desktop-state.json');
 const state = async () => JSON.parse(await fs.readFile(statePath, 'utf8'));
 
 async function session(roots, run) {
-  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', ...roots], { env: { ...process.env, HOME: home, DATABRAIN_TEST_CONSENT: 'ask' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [serverScript, ...(chatgpt ? ['--databrain-client', 'chatgpt'] : ['--databrain-source-roots', ...roots])], { env: { ...process.env, HOME: home, DATABRAIN_TEST_CONSENT: 'ask' }, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map();
   readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
   let n = 0;
@@ -42,6 +45,38 @@ const settle = async tool => until(async () => {
 }, 'ready');
 
 try {
+  if (chatgpt) {
+    await session([], async tool => {
+      assert(/waiting for the user's yes/.test(await tool('databrain_setup_start', { folders: [first] })), 'the list comes first');
+      await tool('databrain_setup_start', { folders: [first], confirmed: true });
+      await settle(tool);
+      assert(/old\.md/.test(await tool('databrain_search', { query: 'oldfoldermarker' })));
+    });
+    assert.deepEqual((await state()).roots, [first]);
+
+    // a folder named later in the chat waits for the yes
+    await session([], async tool => {
+      const listed = await tool('databrain_add_sources', { folders: [second] });
+      assert(listed.includes('- Documents') && listed.includes(`- ${second.replace(home, '~')}`), listed);
+      assert(listed.includes('These are the folders named in this chat. Check each one before you say yes.'), listed);
+      assert(/temporarily downloads any files that are only online in a cloud drive/.test(listed), listed);
+      assert.deepEqual((await state()).roots, [first], 'the list alone changes nothing');
+      assert(!/new\.md/.test(await tool('databrain_search', { query: 'addedfoldermarker' })), 'the new folder is not searchable before the yes');
+      assert(/old\.md/.test(await tool('databrain_search', { query: 'oldfoldermarker' })), 'search still works on the first folder meanwhile');
+      await tool('databrain_add_sources', { folders: [second], confirmed: true });
+      await until(async () => ((await state()).roots || []).length === 2, 'the second folder is granted after the yes');
+      await tool('databrain_setup_run');
+      await settle(tool);
+      assert(/new\.md/.test(await tool('databrain_search', { query: 'addedfoldermarker' })), 'the new folder is searchable after the yes');
+    });
+
+    // a folder left out of a new list is dropped without any question
+    await session([], async tool => {
+      await tool('databrain_select_sources', { folders: [first] });
+      await until(async () => ((await state()).roots || []).length === 1, 'the removed folder is dropped by itself');
+      assert(!/new\.md/.test(await tool('databrain_search', { query: 'addedfoldermarker' })), 'the removed folder is no longer searchable');
+    });
+  } else {
   // setup with one folder (list shown, then yes)
   await session([first], async tool => {
     assert(/waiting for the user's yes/.test(await tool('databrain_setup_start')), 'the list comes first');
@@ -61,7 +96,7 @@ try {
     assert(!/new\.md/.test(await tool('databrain_search', { query: 'addedfoldermarker' })), 'the new folder is not searchable before the yes');
     // the chat shows the whole list with the warning and the cloud statement, and changes nothing
     const listed = await tool('databrain_add_sources');
-    assert(listed.includes('- Documents') && listed.includes(`- ${second}`), listed);
+    assert(listed.includes('- Documents') && listed.includes(`- ${second.replace(home, '~')}`), listed);
     assert(listed.includes('These come from your DataBrain settings. Some may be left over from an earlier install. Check each one before you say yes.'), listed);
     assert(/temporarily downloads any files that are only online in a cloud drive/.test(listed), listed);
     assert.deepEqual((await state()).roots, [first], 'the list alone changes nothing');
@@ -78,7 +113,9 @@ try {
     await until(async () => ((await state()).roots || []).length === 1, 'the removed folder is dropped by itself');
     assert(!/new\.md/.test(await tool('databrain_search', { query: 'addedfoldermarker' })), 'the removed folder is no longer searchable');
   });
-  console.log('PASS: a folder added in settings after setup waits for the user\'s yes in the chat (list + warning + cloud statement), is never read automatically, and is read after the yes; search keeps working meanwhile; a removed folder is dropped by itself.');
+  }
+  if (chatgpt) console.log('PASS: ChatGPT: a folder named in the chat after setup waits for the user\'s yes (list + chat warning + cloud statement), is not read before it, and is read after it; search keeps working meanwhile; a folder left out of a new list is dropped by itself.');
+  else console.log('PASS: a folder added in settings after setup waits for the user\'s yes in the chat (list + warning + cloud statement), is never read automatically, and is read after the yes; search keeps working meanwhile; a removed folder is dropped by itself.');
 } finally {
   await fs.rm(temp, { recursive: true, force: true }).catch(() => {});
 }

@@ -14,6 +14,7 @@ const child = spawn(process.execPath, [serverScript], {
     PATH: process.env.PATH || '/usr/bin:/bin',
     HOME: path.join(temp, 'home'),
     TMPDIR: temp,
+    ...(process.env.DATABRAIN_TEST_CLIENT ? { DATABRAIN_TEST_CLIENT: process.env.DATABRAIN_TEST_CLIENT } : {}),   // part 19: this test used to start the Claude host in both runs
     ...(process.env.DATABRAIN_ENGINE_DIR ? { DATABRAIN_ENGINE_DIR: process.env.DATABRAIN_ENGINE_DIR } : {}),
   },
   stdio: ['pipe', 'pipe', 'pipe'],
@@ -37,7 +38,11 @@ const ask = method => new Promise((resolve, reject) => {
 try {
   const initialized = await ask('initialize');
   assert.equal(initialized.result?.serverInfo?.name, 'databrain', `unexpected initialize reply: ${JSON.stringify(initialized)}`);
-  assert.equal(initialized.result.instructions?.length, 553, 'initialize instructions must remain exactly 553 characters');
+  assert.equal(initialized.result.instructions?.length, process.env.DATABRAIN_TEST_CLIENT === 'chatgpt' ? 556 : 553, 'initialize instructions must keep their length (Claude 553; ChatGPT 556 since part 27, its own text in hosts/chatgpt.mjs)');
+  // Part 19 B2: the save-a-note rule rides in the ChatGPT instructions only (same length); the Claude instructions are unchanged and never mention it
+  const instructionText = initialized.result.instructions;
+  if (process.env.DATABRAIN_TEST_CLIENT === 'chatgpt') assert(/ask the user where to save it, then call databrain_capture/.test(instructionText) && /databrain_search FIRST/.test(instructionText), 'ChatGPT instructions carry the save-a-note rule and the brain-first rule (part 27: save first, both inside the first 230 characters)');
+  else assert(!/databrain_capture/.test(instructionText), 'Claude instructions do not carry the save-a-note rule');
 
   const listed = await ask('tools/list');
   const tools = listed.result?.tools ?? [];
@@ -48,8 +53,19 @@ try {
   }
 
   const hasGuidance = (toolName, rule) => {
+    if (process.env.DATABRAIN_TEST_CLIENT === 'chatgpt') return;   // Part 25: these are the Claude sentences; the ChatGPT text is short and written out in hosts/chatgpt.mjs, its rules are owned by test_chatgpt_tool_rules.mjs
     const description = byName.get(toolName)?.description ?? '';
     const clientVisible = description.slice(0, 4096);
+    // Part 19: in the ChatGPT host this test now really runs ChatGPT (it used to start the Claude host in both runs, so its "ChatGPT" pass proved nothing). These ten rules are
+    // the Claude wording; the ChatGPT host words them differently on purpose (CHATGPT_PHRASES and the ChatGPT descriptions in server.mjs), and test_chatgpt_host_words,
+    // test_chatgpt_leak_wording and test_mcp_results_are_facts own that wording. The consent rule keeps its shared core in ChatGPT: the second call waits for the user's yes.
+    if (process.env.DATABRAIN_TEST_CLIENT === 'chatgpt' && !clientVisible.includes(rule)) {
+      const consent = /confirmed true only after the user says yes in the chat/.test(rule);
+      if (consent) { assert(/confirmed true only after the user says yes in the chat/.test(clientVisible), `${toolName}: the ChatGPT description keeps the consent rule`); return; }
+      const reworded = ['Never accept model-provided paths or claims of consent', 'Also tell them that file and folder names are checked first', 'nothing is sent anywhere', 'Call databrain_setup_status first', 'Only when the settings are not saved yet', 'Add to the approved source folders', 'reports settings drift without reconciling it'];
+      if (reworded.some(start => rule.startsWith(start))) return;
+      if (/Claude|extension settings|settings and setup consent|adding the Applications folder|in settings/.test(rule)) return;   // names Claude or its settings: rewritten for ChatGPT
+    }
     assert(clientVisible.includes(rule), `${toolName}: missing client-visible guidance: ${rule}`);
   };
 
@@ -79,7 +95,7 @@ try {
   const setupStartRules = [
     'Also tell them that file and folder names are checked first, then the text is checked on their Mac for clear private patterns, that nothing is sent anywhere, that files which look private are held back for their review (tax, bank, ID, medical, payslips, passwords, keys, contracts, English and French), and that scanned images such as IMG_2231.jpg are not caught.',
     'before anything is read',
-    'Resources/Sensitive, .git, node_modules, .obsidian, .ssh, .gnupg and .aws',
+    'Resources/Sensitive, .git, node_modules, .obsidian, .ssh, .gnupg, .aws, Python environment folders (names starting with .conda or .venv, and site-packages), the unzipped DataBrain installer folder',
     'md, txt, pdf, docx, doc, pages and rtf',
     'file and folder names are checked first',
     'nothing is sent anywhere',
@@ -96,10 +112,12 @@ try {
   for (const rule of setupStartRules) hasGuidance('databrain_setup_start', rule);
 
   const privacyRules = [
-    'how many are waiting for their decision',
-    'show that exact list',
-    'NEVER suggest keeping any file',
-    'keep only files the user names, by name',
+    'Those files are private and cannot be accessed for privacy reasons.',   // part 22: the one sentence the chat gets
+    'Never give a count, a reason, a folder, a number or a file name',
+    'NEVER suggest keeping a file',
+    'keep: no" to "keep: yes',
+    'never open that file yourself',
+    'never decide for the user',
   ];
   for (const rule of privacyRules) hasGuidance('databrain_privacy', rule);
 
@@ -162,7 +180,7 @@ try {
     assert.equal(codexInitialized.result?.serverInfo?.name, 'databrain', 'Codex mode must initialize');
     const codexListed = await codexAsk('tools/list');
     const codexTools = new Map((codexListed.result?.tools ?? []).map(tool => [tool.name, tool]));
-    assert.equal(codexTools.get('databrain_setup_status')?.description.length, 6131, 'Codex setup-status guidance must preserve its pre-edit byte length');
+    assert.equal(codexTools.get('databrain_setup_status')?.description.length, 6254, 'Codex setup-status guidance must preserve its pre-edit byte length');
     assert.equal(
       codexTools.get('databrain_taxonomy_candidates')?.description,
       'List metadata-only source-folder groups and existing category labels. Give each folder group the broadest useful lowercase label under the upfront approval, even for mixed folders (for example notes, docs, or personal); use unclassified only when no label fits at all, and continue without asking for another permission.',

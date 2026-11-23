@@ -6,6 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+
+// ChatGPT host: NOT APPLICABLE. This gate replaces and removes a Claude extension package (.mcpb) and checks that the brain survives. ChatGPT has no .mcpb
+// package; its install-over-an-old-install and brain-kept checks are test_chatgpt_journey.mjs (step 5) and test_chatgpt_installer.mjs.
+if (process.env.DATABRAIN_TEST_CLIENT === 'chatgpt') { console.log('NOT APPLICABLE on ChatGPT: .mcpb package replacement/uninstall; ChatGPT has no .mcpb package. Covered there by test_chatgpt_journey (install again keeps the brain) and test_chatgpt_installer.'); process.exit(0); }
 process.env.DATABRAIN_TEST_NO_AUTO_LABELS = '1';   // this test walks the manual labelling steps; test_mcp_auto_labels.mjs covers the automatic finish
 
 // Same-version local package-replacement/uninstall simulation. This checks the
@@ -33,8 +37,8 @@ async function treeDigest(root) {
       const child = path.join(folder, entry.name);
       const name = path.posix.join(relative, entry.name);
       if (entry.isDirectory()) await visit(child, name);
-      // the timing log gains one "server-start" line each time a server starts (diagnostics, not persisted state): everything else in it must not change
-      else if (entry.isFile() && name.endsWith('stage-timing.log')) entries.push(`${name}\0${createHash('sha256').update((await fs.readFile(child, 'utf8')).split('\n').filter(line => !line.includes('\tserver-start\t')).join('\n')).digest('hex')}`);
+      // the timing log gains one "server-start" line each time a server starts and (part 23) one "tool-call" line for every call (diagnostics, not persisted state): everything else in it must not change
+      else if (entry.isFile() && name.endsWith('stage-timing.log')) entries.push(`${name}\0${createHash('sha256').update((await fs.readFile(child, 'utf8')).split('\n').filter(line => !line.includes('\tserver-start\t') && !line.includes('\ttool-call\t')).join('\n')).digest('hex')}`);
       else if (entry.isFile()) entries.push(`${name}\0${await digestFile(child)}`);
       else entries.push(`${name}\0special:${entry.isSymbolicLink() ? await fs.readlink(child) : 'other'}`);
     }

@@ -1,6 +1,7 @@
 // Shared by the 0.1.38 tests: start the server in a fake HOME, call tools, wait for states. Invented data only.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,8 +15,21 @@ export const serverScript = process.env.DATABRAIN_SERVER || path.join(here, '../
 export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function until(check, label, limit = 180000) { for (const t0 = Date.now(); !(await check()); await sleep(200)) assert(Date.now() - t0 < limit, `timed out: ${label}`); }
 
+// Every fake home made here is removed when the test process ends, pass or fail (a failed assertion, an uncaught error, Ctrl-C, a kill by TERM).
+// Before this, each run left its folders behind in the temp directory: hundreds of MB per installer run, 14 GB in all until they were swept by hand.
+const madeHomes = new Set();
+let cleanupArmed = false;
+function removeMadeHomes() { for (const dir of madeHomes) { try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } } madeHomes.clear(); }
+function armCleanup() {
+  if (cleanupArmed) return;
+  cleanupArmed = true;
+  process.on('exit', removeMadeHomes);
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => { removeMadeHomes(); process.exit(1); });
+}
+
 export async function fakeHome(prefix) {
   const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), `databrain-${prefix}-`)));
+  madeHomes.add(temp); armCleanup();
   const home = path.join(temp, 'home');
   const docs = path.join(home, 'Documents');
   await fs.mkdir(docs, { recursive: true });
@@ -23,7 +37,7 @@ export async function fakeHome(prefix) {
 }
 
 export function startServer({ home, roots, env = {}, nodeArgs = [] }) {
-  const child = spawn(process.execPath, [...nodeArgs, serverScript, '--databrain-source-roots', ...roots], { env: { ...process.env, HOME: home, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [...nodeArgs, serverScript, '--databrain-source-roots', ...roots], { env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map(); let n = 0;
   readline.createInterface({ input: child.stdout }).on('line', line => { try { const m = JSON.parse(line); waiting.get(m.id)?.(m); } catch {} });
   const ask = (method, params) => new Promise(resolve => { const id = ++n; waiting.set(id, resolve); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });

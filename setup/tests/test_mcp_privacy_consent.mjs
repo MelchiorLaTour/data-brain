@@ -64,40 +64,47 @@ try {
   await call('databrain_setup_start');
   await waitFor(async () => (await call('databrain_setup_status')).includes('SETUP PAUSED FOR PRIVACY REVIEW'), 'privacy pause');
   const listed = await call('databrain_privacy', { action: 'list' });
-  assert.match(listed, /payslip\.md/);
-  assert.match(listed, /bank\.md/);
+  // Part 18: the chat list carries numbers only; the names are in a local file the model is not given
+  const reviewText = () => fs.readFile(path.join(home, 'DataBrain', 'Private files review.txt'), 'utf8').catch(() => '');   // no file while nothing is held
+  const numberOf = async name => (await reviewText()).split('\n').find(line => line.includes(name))?.match(/^(\d+)\. /)?.[1];
+  assert.doesNotMatch(listed, /payslip|bank\.md/, 'the chat list carries no file name');
+  assert.match(await reviewText(), /payslip\.md/);
+  assert.match(await reviewText(), /bank\.md/);
   const privacyFile = () => fs.readFile(path.join(home, 'DataBrain', '.databrain', 'privacy.tsv'), 'utf8');
 
-  const forged = await call('databrain_privacy', { action: 'decide', keep: ['payslip.md', path.join(docs, 'invented.md')] });
-  assert.doesNotMatch(forged, /Recorded:/, 'an invented additional path must block the batch');
+  const forged = await call('databrain_privacy', { action: 'decide', keep: [await numberOf('payslip.md'), '999'] });
+  assert.doesNotMatch(forged, /^Recorded/, 'an invented additional number must block the batch');
+  assert.doesNotMatch(await call('databrain_privacy', { action: 'decide', keep: ['payslip.md'] }), /^Recorded/, 'a file name is not accepted');
   assert.match(await privacyFile(), /held\t.*payslip\.md/);
   assert.match(await privacyFile(), /held\t.*bank\.md/);
   await assert.rejects(fs.stat(path.join(home, 'DataBrain', 'moc', 'index.tsv')), { code: 'ENOENT' });
   assert.doesNotMatch(await call('databrain_read', { path: path.join(docs, 'payslip.md') }), /private-marker-never-read-before-approval/);
 
-  const approved = await call('databrain_privacy', { action: 'decide', keep: ['payslip.md'] });
-  assert.match(approved, /1 allowed/);
+  const approved = await call('databrain_privacy', { action: 'decide', keep: [await numberOf('payslip.md')] });
+  assert.match(approved, /^Recorded\. The files the user kept/);
   assert.match(await privacyFile(), /allowed\t.*payslip\.md/);
   assert.match(await privacyFile(), /excluded\t.*bank\.md/);
-  await waitFor(async () => /Payslip app item/.test(await call('databrain_privacy', { action: 'list' })), 'app item held after app scan');
+  await waitFor(async () => { await call('databrain_privacy', { action: 'list' }); return /\d+\. .+ item [0-9a-f]{6}   \(/.test(await reviewText()); }, 'app item held after app scan (named in the local file as "<App> item <id>", never by its title)');
   const appList = await call('databrain_privacy', { action: 'list' });
-  const appShownLine = appList.split('\n').find(line => line.includes('Payslip app item'));
-  const appShown = appShownLine.slice(2, appShownLine.lastIndexOf(' ('));
+  assert(!/Payslip app item/.test(appList) && !/ item [0-9a-f]{6}/.test(appList), `an app item is not named in the chat list:\n${appList}`);
+  assert(!/Payslip app item/.test(await reviewText()), 'an app item is not listed by its title in the local file either');
+  const appShown = (await reviewText()).split('\n').find(line => / item [0-9a-f]{6}   \(/.test(line)).match(/^(\d+)\. /)[1];
   const heldRows = (await privacyFile()).trim().split('\n').map(row => row.split('\t'));
   const appHeldPath = heldRows.find(([status, file]) => status === 'held' && file.includes('app-content'))?.[1];
   assert.ok(appHeldPath, 'the app item must be held by its logical mirror path');
   await assert.rejects(fs.stat(appHeldPath), { code: 'ENOENT' }, 'held app content must have been deleted before approval');
   const approvedApp = await call('databrain_privacy', { action: 'decide', keep: [appShown] });
-  assert.match(approvedApp, /1 allowed/);
+  assert.match(approvedApp, /^Recorded\. The files the user kept/);
   await waitFor(async () => /Stage: (?:taxonomy pending|verification pending|ready)\./.test(await call('databrain_setup_status')), 'released app item indexing to settle');
 
   const activeMirrorFile = path.join(docs, 'payslip-next.md');
   await fs.writeFile(activeMirrorFile, '# Pay slip\nordinary active-mirror regression marker.\n');
   await fs.appendFile(path.join(home, 'DataBrain', '.databrain', 'privacy.tsv'), `held\t${activeMirrorFile}\tsynthetic fake-home held row\n`);
   const activeMirrorList = await call('databrain_privacy', { action: 'list' });
-  assert.match(activeMirrorList, /payslip-next\.md/);
-  const activeMirrorApproval = await call('databrain_privacy', { action: 'decide', keep: ['payslip-next.md'] });
-  assert.match(activeMirrorApproval, /1 allowed/, 'active app mirror must not invalidate the selected user-root identity check');
+  assert.doesNotMatch(activeMirrorList, /payslip-next\.md/);
+  assert.match(await reviewText(), /payslip-next\.md/);
+  const activeMirrorApproval = await call('databrain_privacy', { action: 'decide', keep: [await numberOf('payslip-next.md')] });
+  assert.match(activeMirrorApproval, /^Recorded\. The files the user kept/, 'active app mirror must not invalidate the selected user-root identity check');
   await waitFor(async () => /Stage: (?:taxonomy pending|verification pending|ready)\./.test(await call('databrain_setup_status')), 'ordinary active-mirror release to settle');
   console.log('PASS: held files stay held until the user names them; a forged extra path blocks the batch; naming releases a deleted held app item and ordinary files.');
 } finally {

@@ -67,7 +67,7 @@ try {
     const line = text.split('\n').find(l => l.startsWith('Supported files not indexed:'));
     assert(line, `${label} must say why supported files are not indexed:\n${text.slice(0, 1500)}`);
     assert(/1 could not be read \(macOS blocked access\)/.test(line) && !/held back for privacy/.test(line), `${label} reasons with counts, and the privacy count is only in its own labelled line: ${line}`);
-    if (label === 'status') assert(/^Held back for privacy: /m.test(text), `status has the one labelled privacy line:\n${text.slice(0, 1500)}`);
+    if (label === 'status') assert(text.includes('Those files are private and cannot be accessed for privacy reasons.') && !/Held back for privacy/.test(text), `status has the one private sentence:\n${text.slice(0, 1500)}`);
     for (const name of ['blank-sheet', 'locked-notes', 'payslip', 'budget']) assert(!line.includes(name), `${label} must not name files: ${line}`);
   }
   console.log('PASS: identical files show once with "also in N other places" (search and abstain_check, still readable), and status and diagnostics say why supported files are not indexed, with counts and no names.');

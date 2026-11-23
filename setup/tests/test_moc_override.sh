@@ -300,8 +300,15 @@ if ! NB_MOC_DIR="$MOC" NB_CANON_ROOTS_FILE="$ROOTS_FILE" bash "$PROJECT_ROOT/ver
 fi
 cat "$SCRATCH/verify-install.log"
 APP_ENGINE_DIR="${DATABRAIN_TEST_APP_ENGINE_DIR:-$PROJECT_ROOT}"
+# ChatGPT host: the MCP part (test_mcp_data_route.mjs) drives the Claude destination chooser and the saved-folder-list grants (a selection file, paused chooser
+# windows). ChatGPT has neither: its folders are named in the chat, which test_chatgpt_folders_from_chat.mjs and test_chatgpt_picker.mjs cover. The engine
+# checks in this file (indexing, pruning, extraction, file-note, synth-save, write-back path rules, verify-install) are host-neutral and still run.
+if [ "${DATABRAIN_TEST_CLIENT:-}" = chatgpt ]; then
+  echo 'NOT APPLICABLE on ChatGPT: test_mcp_data_route.mjs (Claude destination chooser and saved folder list); the engine checks below still run.'
+else
 node "$PROJECT_ROOT/setup/tests/test_mcp_data_route.mjs" \
   "$APP_ENGINE_DIR" "$DESTINATION" "$ROOTS_FILE" "$CANON_SOURCE_A"
+fi
 
 # Terminal capture and synthesis must become indexed/searchable with explicit keywords,
 # preserve an existing filename collision, and refuse a synthesis destination outside grants.

@@ -93,11 +93,11 @@ try {
   assert.equal(helperProbe.status, 0, `the synthetic helper launches directly (${helperProbe.stderr})`);
   const readers = await import(path.join(serverDir, 'app-readers.mjs'));
   process.env.DATABRAIN_TEST_APP_OSASCRIPT = fastHelper;
-  const healthy = await readers.withBackgroundApp({ name: 'Fixture', bundlePath: '/synthetic/Fixture.app', sdefPath: '/synthetic/Fixture.sdef' }, session => session.run('// synthetic fast result'));
+  const healthy = await readers.withBackgroundApp({ name: 'Fixture', bundlePath: '/synthetic/Fixture.app', sdefPath: '/synthetic/Fixture.sdef' }, session => session.run('// synthetic fast result'), { launch: true });
   assert.equal(healthy.ok, true, `a healthy interpreter result before the deadline remains successful (${JSON.stringify(healthy)})`);
   process.env.DATABRAIN_TEST_APP_OSASCRIPT = helper;
   const startedAt = Date.now();
-  const result = await readers.withBackgroundApp({ name: 'Fixture', bundlePath: '/synthetic/Fixture.app', sdefPath: '/synthetic/Fixture.sdef' }, session => session.run('// synthetic interpreter timeout'));
+  const result = await readers.withBackgroundApp({ name: 'Fixture', bundlePath: '/synthetic/Fixture.app', sdefPath: '/synthetic/Fixture.sdef' }, session => session.run('// synthetic interpreter timeout'), { launch: true });
   const elapsed = Date.now() - startedAt;
   const helperPid = await fs.readFile(pidFile, 'utf8').catch(() => 'not started');
   const descendantPid = await fs.readFile(descendantFile, 'utf8').catch(() => 'not started');
@@ -112,7 +112,7 @@ try {
   }
   process.env.DATABRAIN_TEST_APP_OSASCRIPT = stubbornHelper;
   const stubbornStartedAt = Date.now();
-  const stubbornResult = await readers.withBackgroundApp({ name: 'Fixture', bundlePath: '/synthetic/Fixture.app', sdefPath: '/synthetic/Fixture.sdef' }, session => session.run('// synthetic stubborn interpreter timeout'));
+  const stubbornResult = await readers.withBackgroundApp({ name: 'Fixture', bundlePath: '/synthetic/Fixture.app', sdefPath: '/synthetic/Fixture.sdef' }, session => session.run('// synthetic stubborn interpreter timeout'), { launch: true });
   const stubbornElapsed = Date.now() - stubbornStartedAt;
   const stubbornPids = [await fs.readFile(pidFile, 'utf8'), await fs.readFile(descendantFile, 'utf8'), await fs.readFile(stubbornGrandchild, 'utf8')];
   assert.equal(stubbornResult.ok, false, 'a TERM-ignoring helper is a timeout failure');
@@ -124,13 +124,13 @@ try {
   process.env.LIFECYCLE_PID = lifecyclePid;
   process.env.LIFECYCLE_DESCENDANT = lifecycleDescendant;
   process.env.LIFECYCLE_MODE = 'error-first';
-  const beforeCheckFailure = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, async session => [await session.run('// synthetic failed running check'), await session.run('// synthetic second script')]);
+  const beforeCheckFailure = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, async session => [await session.run('// synthetic failed running check'), await session.run('// synthetic second script')], { launch: true });
   const failureCalls = (await fs.readFile(lifecycleLog, 'utf8')).trim().split('\n');
   assert.deepEqual(beforeCheckFailure.map(result => result.ok), [false, false], 'a failed app-running check remains latched and aborts later scripts');
   assert.deepEqual(failureCalls, ['running'], `failed running check never launches or hides the app (${failureCalls.join(',')})`);
   await fs.writeFile(lifecycleLog, '');
   process.env.LIFECYCLE_MODE = 'invalid';
-  const invalidCheck = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, session => session.run('// synthetic invalid running check'));
+  const invalidCheck = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, session => session.run('// synthetic invalid running check'), { launch: true });
   const invalidCalls = (await fs.readFile(lifecycleLog, 'utf8')).trim().split('\n');
   assert.equal(invalidCheck.ok, false, 'successful but malformed app-running output is unknown and aborts');
   assert.deepEqual(invalidCalls, ['running'], `invalid running output never launches or hides the app (${invalidCalls.join(',')})`);
@@ -143,7 +143,7 @@ try {
     await fs.writeFile(lifecycleLog, '');
     await fs.rm(interpreterMarker, { force: true });
     process.env.LIFECYCLE_MODE = mode;
-    const failedLifecycle = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, async session => [await session.run(`// synthetic ${mode}`), await session.run('// synthetic second script')]);
+    const failedLifecycle = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, async session => [await session.run(`// synthetic ${mode}`), await session.run('// synthetic second script')], { launch: true });
     const lifecycleCalls = (await fs.readFile(lifecycleLog, 'utf8')).trim().split('\n');
     assert.deepEqual(failedLifecycle.map(result => result.ok), [false, false], `${mode} failure remains latched`);
     assert.deepEqual(lifecycleCalls, expectedCalls, `${mode} fails closed at the expected lifecycle step (${lifecycleCalls.join(',')})`);
@@ -152,14 +152,14 @@ try {
   await fs.writeFile(lifecycleLog, '');
   await fs.rm(interpreterMarker, { force: true });
   process.env.LIFECYCLE_MODE = 'success';
-  const validLaunch = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, session => session.run('// synthetic successful launch'));
+  const validLaunch = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, session => session.run('// synthetic successful launch'), { launch: true });
   assert.equal(validLaunch.ok, true, 'a valid false, successful launch, true poll and successful hide still reads');
   assert.deepEqual((await fs.readFile(lifecycleLog, 'utf8')).trim().split('\n'), ['running', 'launch', 'running', 'hide']);
   assert.equal(await fs.access(interpreterMarker).then(() => true, () => false), true, 'the successful lifecycle reaches the interpreter');
   await fs.writeFile(lifecycleLog, '');
   process.env.LIFECYCLE_MODE = 'timeout';
   const runToolStartedAt = Date.now();
-  const timedOutCheck = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, session => session.run('// synthetic timed-out running check'));
+  const timedOutCheck = await readers.withBackgroundApp({ name: 'Fixture', bundleId: 'synthetic.fixture', bundlePath: '/synthetic/Fixture.app' }, session => session.run('// synthetic timed-out running check'), { launch: true });
   const runToolElapsed = Date.now() - runToolStartedAt;
   const timeoutCalls = (await fs.readFile(lifecycleLog, 'utf8')).trim().split('\n');
   assert.equal(timedOutCheck.ok, false, 'a timed-out lifecycle running check fails closed');
