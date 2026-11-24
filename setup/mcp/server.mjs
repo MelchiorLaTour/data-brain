@@ -55,6 +55,7 @@ if (chatgptMode && process.env.DATABRAIN_SKIP_CODEX_OUTPUT === undefined) proces
 const appReaders = codexMode ? null : await import('./app-readers.mjs');
 const host = chatgptMode ? await import('./hosts/chatgpt.mjs') : null;   // the ChatGPT host's own text; the Claude host never loads it
 const indexWorkerMode = process.argv.includes('--databrain-run-index-worker');
+const cloudWorkerMode = process.argv.includes('--databrain-run-cloud-worker');   // part 35: the ChatGPT host's detached cloud-download worker
 const indexWorkerJobFlag = process.argv.indexOf('--databrain-job-id');
 const indexWorkerJobId = indexWorkerJobFlag >= 0 ? (process.argv[indexWorkerJobFlag + 1] || '') : '';
 const indexWorkerRefresh = process.argv.includes('--databrain-run-index-refresh');
@@ -1579,6 +1580,7 @@ async function diagnosticsText() {
   let rows = 0;
   try { rows = (await fs.readFile(path.join(mocDir, 'index.tsv'), 'utf8')).split('\n').filter(line => line && !line.startsWith('#')).length; } catch {}
   const cloudCount = mocDir ? (await readCloudPending().catch(() => [])).length : 0;
+  const cloudFetchProgress = await cloudProgressView(state);   // part 35: on the ChatGPT host the progress is the worker's
   let recent = ''; let wholeLog = '';
   try { wholeLog = (await fs.readFile(path.join(stateDir, 'stage-timing.log'), 'utf8')).trim(); recent = wholeLog.split('\n').filter(line => !line.includes('\ttool-call\t')).slice(-15).join('\n'); } catch {}   // Part 23: the one-line-per-call entries stay in the file; the report shows job lines
   const jobs = [...activeJobs.values()].filter(job => job.status === 'running').map(job => `${job.kind}: running (job ID ${job.id}; started ${job.startedAt})`);
@@ -1651,6 +1653,10 @@ async function statusText() {
   }
   ensureRelationshipReport(state);
   const jobs = [...activeJobs.values()].map(job => `${job.kind}: ${job.status} — ${job.message} (job ID ${job.id})`);
+  if (chatgptMode && cloudWorkerRunning(state)) {   // part 35: the download is a worker process, listed like a job of this server
+    const view = await cloudProgressView(state);
+    jobs.push(`cloud fetch: running — ${view?.running ? `Cloud fetch: ${view.done} of ${view.total} files, batch ${view.batch} of ${view.batches}` : 'starting'} (job ID ${state.cloudFetchJob?.id || 'unknown'}; runs in the background and carries on if ChatGPT closes)`);
+  }
   const stage = state.stage || 'not configured';
   if (stage === 'ready' && !codexMode && !state.readyProbeTitle) state = await ensureReadyProbeTitle(state);
   const inFlight = codexMode ? null : indexingInFlight(state);
@@ -1737,7 +1743,7 @@ async function statusText() {
     ...(!codexMode && resumeNoteText(state, inFlight) ? [resumeNoteText(state, inFlight)] : []),
     ...(!codexMode && folderChangePending(state) && inFlight ? [`Indexing is running; your folder change will apply when it finishes${await indexingProgressText()}. Nothing needs to be restarted.`] : []),
     ...(!codexMode && sourceSettingsProvided && state.stage && state.stage !== 'not configured' && settingsAdditionsWaiting(state).length ? [`Folders added in the extension settings are waiting for the user's yes and have not been read.`] : []),
-    ...(cloudFetchProgress?.running ? [`Cloud fetch: ${cloudFetchProgress.done} of ${cloudFetchProgress.total} files, batch ${cloudFetchProgress.batch} of ${cloudFetchProgress.batches} (${Math.round(cloudFetchProgress.done / cloudFetchProgress.total * 100)}%).`] : []),
+    ...(await cloudProgressLines(state)),
     ...(await privacyStatusLine().then(line => line ? [line] : []).catch(() => [])),
     ...(codexMode && state.indexJob ? [`Background job ${state.indexJob.id}: ${state.indexJob.status} — ${state.indexJob.message || 'Working.'}`] : []),
     `${codexMode ? 'Next' : 'Current state'}: ${adding ? addingText : nextStep}`,
@@ -3336,6 +3342,7 @@ function lockHeldElsewhere(lockFile) {
 function indexingInFlight(state) {
   const job = [...activeJobs.values()].find(candidate => candidate.status === 'running' && ['initial indexing', 'refresh', 'cloud fetch', 'taxonomy application', 'relationship report'].includes(candidate.kind));
   if (job) return { kind: job.kind, id: job.id, orphan: false };
+  if (chatgptMode && cloudWorkerRunning(state)) return { kind: 'cloud fetch', id: state.cloudFetchJob?.id ?? null, orphan: false };   // part 35: the download lives in its own process
   if (state.stage === 'indexing' && orphanEngineAlive()) return { kind: 'indexing started before the extension restarted', id: null, orphan: true };
   return null;
 }
@@ -3463,10 +3470,13 @@ async function readAppsAtStart(state) {
 // The user agreed at setup that indexing temporarily downloads cloud-only files: once the first indexing has finished, the download starts by itself.
 let cloudFetchAutoAttempted = false;
 async function startCloudFetchAfterSetup() {
-  if (codexMode || cloudFetchAutoAttempted || testHook('DATABRAIN_TEST_NO_AUTO_CLOUD') === '1' || process.env.DATABRAIN_TEST_STEP_BY_STEP === '1' || process.env.DATABRAIN_TEST_NO_AUTO_LABELS === '1') return;
+  if (codexMode || (cloudFetchAutoAttempted && !chatgptMode) || testHook('DATABRAIN_TEST_NO_AUTO_CLOUD') === '1' || process.env.DATABRAIN_TEST_STEP_BY_STEP === '1' || process.env.DATABRAIN_TEST_NO_AUTO_LABELS === '1') return;
   if ([...activeJobs.values()].some(job => job.status === 'running') || orphanEngineAlive()) return;
   const state = await readState().catch(() => ({}));
-  if (state.cloudFetchStarted || state.cloudConsent !== true || !['relationships pending', 'verification pending', 'ready'].includes(state.stage)) return;
+  if (state.cloudConsent !== true || !['relationships pending', 'verification pending', 'ready'].includes(state.stage)) return;
+  // ChatGPT host (part 35): the download is a detached worker; this pass starts it, or starts it again when it was cut off.
+  if (chatgptMode) { await ensureCloudWorker(state).catch(error => logStage(null, 'cloud-worker', Date.now(), `could not start the worker: ${String(error.message || '').slice(0, 150)}`)); return; }
+  if (state.cloudFetchStarted) return;
   cloudFetchAutoAttempted = true;
   try {
     await writeState({ ...state, cloudFetchStarted: true, updatedAt: new Date().toISOString() });
@@ -3502,7 +3512,7 @@ async function runMaintenance() {
 }
 
 function scheduleMaintenance() {
-  if (maintenanceTimer || codexMode) return;
+  if (maintenanceTimer || codexMode || cloudWorkerMode) return;
   maintenanceTimer = setTimeout(async () => {
     maintenanceTimer = null;
     maintenanceRuns += 1;
@@ -4194,6 +4204,8 @@ async function readToDownload(file, job) {
     stream.on('close', () => { clearTimeout(timer); resolve(); });
   });
   job.activeStream = null;
+  const downloadLog = testHook('DATABRAIN_TEST_DOWNLOAD_LOG');   // tests count every download (and, with the fake brctl, every eviction) in order
+  if (downloadLog) await fs.appendFile(downloadLog, `download ${file}\n`).catch(() => {});
   const datalessList = testHook('NB_TEST_DATALESS_LIST');   // tests simulate the download by dropping the file from the simulated list
   if (datalessList) {
     const listPath = datalessList;
@@ -4216,15 +4228,13 @@ async function cloudFailureSummary() {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([reason, n]) => `${n} ${reason}`).join(', ');
 }
 
-async function beginCloudFetch(args = {}) {
-  if (codexMode) return 'Cloud download is available in Claude Desktop only.';
-  const state = await readState();
-  if (!['taxonomy pending', 'relationships pending', 'verification pending', 'ready'].includes(state.stage)) return 'Finish the first indexing before downloading cloud files.';
-  if (state.stage === 'indexing' || [...activeJobs.values()].some(job => job.status === 'running')) return 'Another DataBrain job is running. Check databrain_setup_status and try again when it finishes.';
-  await runEngine('cloud-scan.sh', [], { message: 'Looking for online-only files. Nothing is downloaded.' });
+// What a cloud fetch would do right now: scan, pick the files, cut them into batches, check the disk. Returns { text } when there is nothing to do or
+// the disk is too small, else { pending, total, batches, roots }. `scan: false` reuses the list the caller scanned a moment ago.
+async function planCloudFetch(state, args = {}, { scan = true } = {}) {
+  if (scan) await runEngine('cloud-scan.sh', [], { message: 'Looking for online-only files. Nothing is downloaded.' });
   let pending = await readCloudPending();
   if (args.provider) pending = pending.filter(item => item.provider.toLowerCase().includes(String(args.provider).toLowerCase()));
-  if (!pending.length) return 'There are no online-only files to download.';
+  if (!pending.length) return { text: 'There are no online-only files to download.' };
   const total = pending.reduce((sum, item) => sum + item.size, 0);
   // Batches: download a few files, index their text, put the iCloud ones back online-only, then the next batch. The disk only ever has to
   // hold ONE batch (plus room to work), not every file at once, so this works on a nearly full Mac.
@@ -4233,10 +4243,31 @@ async function beginCloudFetch(args = {}) {
   const freeBytes = freeKilobytes() * 1024;
   const needed = largest + cloudMarginBytes(largest);
   if (freeBytes < needed) {
-    return `Not enough free disk space, so nothing was downloaded. Files are downloaded in batches, and the largest batch (${Math.max(...batches.map(batch => batch.length))} file(s), about ${humanSize(largest)}) needs room to work too (${humanSize(needed)} in all) and this Mac has ${humanSize(freeBytes)} free. Space can be freed, or one drive at a time can be fetched with the provider option.`;
+    return { text: `Not enough free disk space, so nothing was downloaded. Files are downloaded in batches, and the largest batch (${Math.max(...batches.map(batch => batch.length))} file(s), about ${humanSize(largest)}) needs room to work too (${humanSize(needed)} in all) and this Mac has ${humanSize(freeBytes)} free. Space can be freed, or one drive at a time can be fetched with the provider option.`, refused: true };
   }
-  const roots = await validateStoredRoots(state);
-  const job = startJob('cloud fetch', async current => {
+  return { pending, total, batches, roots: await validateStoredRoots(state) };
+}
+
+async function beginCloudFetch(args = {}) {
+  if (codexMode) return 'Cloud download is available in Claude Desktop only.';
+  const state = await readState();
+  if (!['taxonomy pending', 'relationships pending', 'verification pending', 'ready'].includes(state.stage)) return 'Finish the first indexing before downloading cloud files.';
+  if (state.stage === 'indexing' || [...activeJobs.values()].some(job => job.status === 'running')) return 'Another DataBrain job is running. Check databrain_setup_status and try again when it finishes.';
+  if (chatgptMode && cloudWorkerRunning(state)) return 'The cloud download is already running in the background (it carries on if ChatGPT closes). Check databrain_setup_status for "Cloud fetch: N of M".';
+  const plan = await planCloudFetch(state, args);
+  if (plan.text) return plan.text;
+  const { pending, total, batches, roots } = plan;
+  // ChatGPT closes and restarts DataBrain servers all the time: the download runs in its own detached process, which resumes and restarts by itself.
+  if (chatgptMode) {
+    const id = await launchCloudWorker(state, { provider: args.provider, reuseScan: true });
+    return `Downloading ${pending.length} online-only file${pending.length === 1 ? '' : 's'} (${humanSize(total)}) for indexing, as agreed at setup (job ${id}). They are fetched in ${batches.length} batch${batches.length === 1 ? '' : 'es'} (download, index, put iCloud files back online-only, next batch), so only one batch is ever on the disk. It runs in the background and carries on if ChatGPT closes. The status shows "Cloud fetch: N of M".`;
+  }
+  const job = startJob('cloud fetch', current => cloudFetchTask(current, pending, batches, roots));
+  return `Downloading ${pending.length} online-only file${pending.length === 1 ? '' : 's'} (${humanSize(total)}) for indexing, as agreed at setup (job ${job.id}). They are fetched in ${batches.length} batch${batches.length === 1 ? '' : 'es'} (download, index, put iCloud files back online-only, next batch), so only one batch is ever on the disk. The status shows "Cloud fetch: N of M".`;
+}
+
+// The whole download, batch by batch. Runs inside a job of the server (Claude host) or inside the detached worker (ChatGPT host).
+async function cloudFetchTask(current, pending, batches, roots) {
     // The user agreed to these downloads in the chat at setup (see CLOUD_DOWNLOAD_STATEMENT); there is no second question.
     cloudFetchProgress = { total: pending.length, done: 0, failed: 0, running: true, batch: 0, batches: batches.length };
     const fetchStartedAt = Date.now();
@@ -4248,6 +4279,9 @@ async function beginCloudFetch(args = {}) {
       for (const [batchIndex, batch] of batches.entries()) {
         cloudFetchProgress.batch = batchIndex + 1;
         const got = [];   // downloaded in this batch
+        // Written before the first download: a worker killed at any point in the batch leaves the list, and the next run puts those files back online-only
+        // (evicting a file that was never downloaded does nothing).
+        if (chatgptMode) await fs.writeFile(evictPath, JSON.stringify(batch.filter(item => item.provider === 'iCloud Drive').map(item => item.file)), { mode: 0o600 }).catch(() => {});
         try {
           for (const item of batch) {
             if (current.cancelled) throw new Error('Cancelled during the cloud download.');
@@ -4257,6 +4291,7 @@ async function beginCloudFetch(args = {}) {
             cloudFetchProgress.done += 1;
           }
           if (got.length) {
+            if (testHook('DATABRAIN_TEST_CLOUD_AFTER_DOWNLOAD_MS')) await sleepMs(Number(testHook('DATABRAIN_TEST_CLOUD_AFTER_DOWNLOAD_MS')));   // test only: a place to cut the batch off
             // If DataBrain stops here, the next indexing end puts these back online-only (evictFetchedCloudFiles).
             const icloud = got.filter(item => item.provider === 'iCloud Drive').map(item => item.file);
             if (icloud.length) await fs.writeFile(evictPath, JSON.stringify(icloud), { mode: 0o600 });
@@ -4265,6 +4300,7 @@ async function beginCloudFetch(args = {}) {
             try { await performFastRefresh(roots, { added: got.map(item => item.file), changed: [], deleted: [], untracked: [] }, current, { deferTail: true }); }
             finally { await releaseIndexWorkerLock(current); }
             indexedAny = true;
+            cloudFetchProgress.indexed = (cloudFetchProgress.indexed || 0) + got.length;   // part 35: what a restart can count as progress (files that reached the index)
             // A file that changed while it was read is not a failed batch: it is listed (path and reason) and the next batch carries on.
             for (const skipped of current.skippedFiles || []) { skippedTotal += 1; failures.push(`${skipped.file}\t${skipped.reason}`); }
           }
@@ -4289,8 +4325,170 @@ async function beginCloudFetch(args = {}) {
     }
     scheduleMaintenance();
     return `Cloud fetch: downloaded and indexed ${cloudFetchProgress.done - cloudFetchProgress.failed - skippedTotal} of ${cloudFetchProgress.total} files${cloudFetchProgress.failed ? `, ${cloudFetchProgress.failed} could not be downloaded` : ''}${skippedTotal ? `, ${skippedTotal} could not be indexed this time (changed while being read; the next fetch retries them)` : ''}.`;
-  });
-  return `Downloading ${pending.length} online-only file${pending.length === 1 ? '' : 's'} (${humanSize(total)}) for indexing, as agreed at setup (job ${job.id}). They are fetched in ${batches.length} batch${batches.length === 1 ? '' : 'es'} (download, index, put iCloud files back online-only, next batch), so only one batch is ever on the disk. The status shows "Cloud fetch: N of M".`;
+}
+
+// ---- Part 35: the ChatGPT host's cloud download runs in a detached worker ----
+// ChatGPT closes and restarts DataBrain servers all the time (a new chat, an app restart, idle), and a download that lived inside a server was
+// abandoned every time. The worker is this same file started with --databrain-run-cloud-worker: it takes its own lock (one worker at a time), runs
+// the same batches (cloudFetchTask), keeps the Mac awake while it works and writes its progress to cloud-fetch-progress.json. Any server that finds
+// a started, unfinished fetch with no live worker starts a new one. What is already indexed is not queued again (cloud-scan.sh skips files that have
+// text), so a restart continues instead of redoing.
+const CLOUD_WORKER_LOCK = 'cloud-worker-lock.sqlite';
+const CLOUD_PROGRESS_FILE = 'cloud-fetch-progress.json';
+const CLOUD_WORKER_MAX_RESTARTS = 5;
+
+function isCloudWorkerAlive(job) {
+  const pid = Number(job?.ownerPid);
+  if (!Number.isSafeInteger(pid) || pid < 2) return false;
+  try { process.kill(pid, 0); }
+  catch (error) { if (error.code !== 'EPERM') return false; }
+  const info = spawnSync('/bin/ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8', timeout: 1500 });
+  if (info.error || /not permitted|permission denied/i.test(info.stderr || '')) return true;
+  return info.status === 0 && info.stdout.includes('--databrain-run-cloud-worker') && info.stdout.includes(path.resolve(here, 'server.mjs'));
+}
+
+// A worker is running when the saved job names a live worker process, when one was launched in the last 30 s, or when its lock is held.
+function cloudWorkerRunning(state) {
+  if (codexMode || !stateDir) return false;
+  const job = state?.cloudFetchJob;
+  if (job && ['complete', 'failed', 'stopped', 'cancelled', 'interrupted'].includes(job.status)) return false;   // the worker wrote its end; it may need a moment to exit
+  if (job && ['starting', 'running', 'cancelling'].includes(job.status)) {
+    if (job.ownerPid ? isCloudWorkerAlive(job) : Date.now() - Date.parse(job.updatedAt || job.startedAt || 0) < 30000) return true;
+  }
+  return lockHeldElsewhere(CLOUD_WORKER_LOCK);
+}
+
+async function readCloudProgress() {
+  try { const progress = JSON.parse(await fs.readFile(path.join(stateDir, CLOUD_PROGRESS_FILE), 'utf8')); return progress && typeof progress === 'object' ? progress : null; } catch { return null; }
+}
+async function writeCloudProgress(jobId, running, message) {
+  if (!cloudFetchProgress) return;
+  const file = path.join(stateDir, CLOUD_PROGRESS_FILE); const temp = `${file}.${randomUUID()}.tmp`;
+  const { total, done, failed, batch, batches, indexed = 0 } = cloudFetchProgress;
+  try {
+    await fs.writeFile(temp, JSON.stringify({ jobId, pid: process.pid, total, done, failed, indexed, batch, batches, running, message: message || '', updatedAt: new Date().toISOString() }), { mode: 0o600 });
+    await fs.rename(temp, file);
+  } catch { await fs.unlink(temp).catch(() => {}); }
+}
+
+// What the status shows: this process's own fetch (Claude host), or the worker's saved progress (ChatGPT host).
+async function cloudProgressView(state) {
+  if (cloudFetchProgress?.running || !chatgptMode) return cloudFetchProgress;
+  const saved = await readCloudProgress();
+  if (!saved) return cloudFetchProgress;
+  return { total: saved.total, done: saved.done, failed: saved.failed, batch: saved.batch, batches: saved.batches, running: saved.running === true && cloudWorkerRunning(state) };
+}
+async function cloudProgressLines(state) {
+  const view = await cloudProgressView(state);
+  const lines = [];
+  if (view?.running) lines.push(`Cloud fetch: ${view.done} of ${view.total} files, batch ${view.batch} of ${view.batches} (${Math.round(view.done / view.total * 100)}%).`);
+  if (chatgptMode && state.cloudFetchJob?.status === 'stopped') lines.push(`The cloud download stopped: ${state.cloudFetchJob.message || 'it could not carry on'} Run databrain_cloud_fetch to try again.`);
+  return lines;
+}
+
+async function setCloudJob(patch) {
+  const state = await readState();
+  const now = new Date().toISOString();
+  await writeState({ ...state, cloudFetchJob: { ...(state.cloudFetchJob || {}), ...patch, updatedAt: now }, updatedAt: now });
+}
+
+async function launchCloudWorker(state, { provider = null, reuseScan = false, restarts = 0, note = '' } = {}) {
+  const fresh = await readState();
+  if (cloudWorkerRunning(fresh)) return fresh.cloudFetchJob?.id || 'running';   // another server started one a moment ago
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  await writeState({ ...fresh, cloudFetchStarted: true, cloudFetchJob: { id, status: 'starting', ...(provider ? { provider } : {}), restarts, startedAt: now, updatedAt: now, nextRetryAt: new Date(Date.now() + retryBaseMs() * 2 ** Math.max(0, restarts - 1)).toISOString(), message: 'Starting the cloud download worker.' }, updatedAt: now });
+  const args = [path.resolve(here, 'server.mjs'), '--databrain-client', launchSettings.client, '--databrain-run-cloud-worker', '--databrain-job-id', id];
+  if (reuseScan) args.push('--databrain-cloud-reuse-scan');
+  if (provider) args.push('--databrain-cloud-provider', String(provider));
+  logStage({ kind: 'cloud fetch', id }, 'cloud-worker', Date.now(), `launching a detached worker${note ? ` (${note})` : ''}`);
+  try {
+    const worker = spawn(process.execPath, args, { cwd: engine, env: process.env, detached: true, stdio: 'ignore' });
+    await new Promise((resolve, reject) => { worker.once('spawn', resolve); worker.once('error', reject); });
+    worker.unref();
+  } catch (error) {
+    await setCloudJob({ id, status: 'failed', message: `Could not start the cloud download worker: ${error.message || 'process startup failed.'}`, finishedAt: new Date().toISOString() }).catch(() => {});
+    throw error;
+  }
+  return id;
+}
+
+// Called by every maintenance pass of a server: start the download once after setup, and start it again when it was cut off.
+async function ensureCloudWorker(state) {
+  const job = state.cloudFetchJob;
+  if (cloudWorkerRunning(state)) return;
+  if (job && ['complete', 'stopped', 'cancelled'].includes(job.status)) return;
+  if (!job && state.cloudFetchStarted !== true) { await launchCloudWorker(state, { note: 'first start after setup' }); return; }
+  // Started, not finished, and no worker alive: it was cut off (the Mac slept or restarted, the worker was killed, an earlier build ran it inside the server).
+  if (job?.nextRetryAt && Date.now() < Date.parse(job.nextRetryAt)) return;
+  let restarts = (job?.restarts || 0) + 1;
+  const saved = await readCloudProgress();
+  if (job && saved && saved.jobId === job.id && saved.indexed > 0) restarts = 1;   // files reached the index before it was cut off: not a loop
+  if (restarts > CLOUD_WORKER_MAX_RESTARTS) {
+    const message = `The cloud download was cut off ${CLOUD_WORKER_MAX_RESTARTS} times in a row without progress, so DataBrain stopped restarting it.`;
+    await setCloudJob({ status: 'stopped', message, finishedAt: new Date().toISOString() });
+    logStage({ kind: 'cloud fetch', id: job?.id }, 'cloud-worker', Date.now(), `stopped restarting: ${message}`);
+    return;
+  }
+  await launchCloudWorker(state, { provider: job?.provider || null, restarts, note: `restart ${restarts} of ${CLOUD_WORKER_MAX_RESTARTS}` });
+}
+
+function keepMacAwake() {
+  try {
+    const program = testHook('DATABRAIN_TEST_CAFFEINATE') || '/usr/bin/caffeinate';
+    const child = spawn(program, ['-i', '-w', String(process.pid)], { stdio: 'ignore', detached: true });   // ends by itself when this worker ends
+    child.on('error', error => logStage({ kind: 'cloud fetch', id: indexWorkerJobId }, 'cloud-worker', Date.now(), `could not keep the Mac awake: ${error.message}`));
+    child.unref();
+    logStage({ kind: 'cloud fetch', id: indexWorkerJobId }, 'cloud-worker', Date.now(), `keeping the Mac awake while this worker runs (caffeinate pid ${child.pid})`);
+  } catch {}
+}
+
+async function runCloudWorker() {
+  const id = indexWorkerJobId;
+  const logJob = { kind: 'cloud fetch', id };
+  const startedMs = Date.now();
+  const reuseScan = process.argv.includes('--databrain-cloud-reuse-scan');
+  const providerFlag = process.argv.indexOf('--databrain-cloud-provider');
+  const provider = providerFlag >= 0 ? process.argv[providerFlag + 1] : null;
+  const lockJob = { id, kind: 'cloud worker' };
+  let acquired = false;
+  let job = null;
+  let timer = null;
+  let signalled = false;
+  let cancelRequested = false;
+  try {
+    // One worker at a time. A probe from another server can make one try fail for a few ms, so try a few times before calling the lock busy.
+    for (let attempt = 0; attempt < 5 && !acquired; attempt += 1) { if (attempt) await sleepMs(100); acquired = await acquireIndexWorkerLock(lockJob, CLOUD_WORKER_LOCK); }
+    if (!acquired) { logStage(logJob, 'cloud-worker', startedMs, `pid=${process.pid} another worker holds the lock: this one exits`); return; }
+    logStage(logJob, 'cloud-worker', startedMs, `pid=${process.pid} started`);
+    const state = await readState();
+    if (!state.stage || !['relationships pending', 'verification pending', 'ready', 'taxonomy pending'].includes(state.stage)) { logStage(logJob, 'cloud-worker', startedMs, `stage "${state.stage}" is not ready for a download: exiting`); return; }
+    await setCloudJob({ id, status: 'running', ownerPid: process.pid, message: 'The cloud download is running in the background.' });
+    keepMacAwake();
+    process.on('SIGTERM', async () => {
+      signalled = true;
+      const saved = await readState().catch(() => ({}));
+      cancelRequested = saved.cloudFetchJob?.status === 'cancelling';
+      if (job) { job.endLogged = true; logStage(job, 'job-end', Date.parse(job.startedAt) || Date.now(), cancelRequested ? 'cancelled: the user cancelled the cloud download' : 'interrupted: the worker was stopped (SIGTERM) while the job was running'); job.cancel(); }
+      else process.exit(0);
+    });
+    await evictFetchedCloudFiles(true).catch(() => {});   // a worker cut off mid-batch left downloaded files: put them back online-only before anything else
+    const plan = await planCloudFetch(state, { provider }, { scan: !reuseScan });
+    if (plan.text) { await setCloudJob({ id, status: plan.refused ? 'stopped' : 'complete', message: plan.text, finishedAt: new Date().toISOString() }); logStage(logJob, 'job-end', startedMs, `${plan.refused ? 'failed' : 'complete'}: ${plan.text.slice(0, 120)}`); return; }
+    job = startJob('cloud fetch', current => cloudFetchTask(current, plan.pending, plan.batches, plan.roots));
+    timer = setInterval(() => { writeCloudProgress(id, true, job.message); }, 1000);
+    await job.done;
+    clearInterval(timer); timer = null;
+    await writeCloudProgress(id, false, job.message);
+    const status = cancelRequested ? 'cancelled' : signalled ? 'interrupted' : job.status === 'complete' ? 'complete' : 'failed';
+    await setCloudJob({ id, status, message: String(job.message || '').slice(0, 300), finishedAt: new Date().toISOString() });
+  } catch (error) {
+    if (timer) clearInterval(timer);
+    await setCloudJob({ id, status: 'failed', message: String(error.message || 'The cloud download failed.').slice(0, 300), finishedAt: new Date().toISOString() }).catch(() => {});
+    logStage(logJob, 'job-end', startedMs, `failed: ${String(error.message || '').slice(0, 150)}`);
+  } finally {
+    if (acquired) await releaseIndexWorkerLock(lockJob);
+  }
 }
 
 // Batch limits follow the free space. A tight disk keeps the floor, ~50 files or ~500 MB; with room to spare the batch may grow to half of the free
@@ -4331,7 +4529,8 @@ async function evictCloudFiles(files) {
 }
 
 // iCloud files that were only downloaded for indexing go back to online-only once indexed.
-async function evictFetchedCloudFiles() {
+async function evictFetchedCloudFiles(force = false) {
+  if (!force && chatgptMode && cloudWorkerRunning(await readState().catch(() => ({})))) return;   // the worker owns that list while it runs
   const listPath = path.join(stateDir, 'cloud-evict.json');
   let files;
   try { files = JSON.parse(await fs.readFile(listPath, 'utf8')); } catch { return; }
@@ -5050,7 +5249,7 @@ async function checkFreshnessAndRefresh(wait = false) {
     return `\n\nFreshness: ${summary}; a background refresh is already running, so these results come from the previous index.`;
   }
   // A cloud fetch indexes each batch itself and records the new freshness baseline once, at its end; a refresh started now would redo its work and fight it for the lock.
-  if ([...activeJobs.values()].some(job => job.kind === 'cloud fetch' && job.status === 'running')) {
+  if ([...activeJobs.values()].some(job => job.kind === 'cloud fetch' && job.status === 'running') || (chatgptMode && cloudWorkerRunning(await readState().catch(() => ({}))))) {
     return `\n\nFreshness: ${summary}; a cloud download is indexing files right now and finishes the update itself.`;
   }
   // Part 22: ChatGPT starts a new DataBrain process for every list it refreshes (six in 43 s on 2026-11-16), and each one made its own job that only waited
@@ -5246,6 +5445,7 @@ const emptyFileMs = name => { try { return statSync(path.join(stateDir, name)).m
 let housekeepingWaiting = false;
 const housekeepingBusy = () => callsInFlight > 0 || Date.now() - emptyFileMs(HOUSEKEEPING_ACTIVITY_FILE) < housekeepingIdleMs();
 function scheduleHousekeeping() {
+  if (cloudWorkerMode) { touchEmptyFile(HOUSEKEEPING_PENDING_FILE); return; }   // the worker leaves the note; the next DataBrain server tidies after a quiet spell
   if (housekeepingJob?.status === 'running') { housekeepingAgain = true; if (!codexMode) touchEmptyFile(HOUSEKEEPING_PENDING_FILE); return; }
   const requestedAt = Date.now();
   if (codexMode || !stateDir) { startHousekeepingJob(requestedAt); return; }
@@ -5622,6 +5822,7 @@ async function markReadyWhenVerified(force = false) {
   if ([...activeJobs.values()].some(job => job.status === 'running') || orphanEngineAlive()) return false;
   const state = await readState().catch(() => ({}));
   if (state.stage !== 'verification pending' || (state.privacyPending && !chatgptMode) || folderChangePending(state)) return false;
+  if (chatgptMode && cloudWorkerRunning(state)) return false;   // part 35: the download keeps the brain busy, as it did when it ran inside the server
   let rows;
   try { rows = (await fs.readFile(path.join(mocDir, 'index.tsv'), 'utf8')).split('\n').filter(line => line && !line.startsWith('#')).map(line => line.split('\t')); }
   catch { return false; }
@@ -6595,6 +6796,15 @@ async function callToolInner(name, args) {
             return resultText(`Cancellation requested for background setup job ${indexJob.id}. Check databrain_setup_status for the stopped checkpoint.`);
           }
         }
+        if (chatgptMode) {   // part 35: the cloud download is a detached worker, not a job of this server
+          const saved = await readState();
+          const cloudJob = saved.cloudFetchJob;
+          if (cloudJob?.id === args.job_id && cloudWorkerRunning(saved)) {
+            await setCloudJob({ status: 'cancelling', message: 'Cancellation requested; the worker puts the downloaded files back online-only.' });
+            try { process.kill(Number(cloudJob.ownerPid), 'SIGTERM'); } catch { return fail('The cloud download worker stopped before the cancellation reached it. Check databrain_setup_status.'); }
+            return resultText(`Cancellation requested for the cloud download (job ${cloudJob.id}). Check databrain_setup_status.`);
+          }
+        }
         const job = activeJobs.get(args.job_id);
         if (!job || job.status !== 'running' || typeof job.cancel !== 'function') return fail('That job is no longer active or cannot be cancelled.');
         if (job.cancel() === false) return fail('That job is already saving its complete result and can no longer be cancelled.');
@@ -6658,6 +6868,8 @@ function pickerToolSpec(tool) {
 
 if (indexWorkerMode) {
   await runIndexWorker();
+} else if (cloudWorkerMode) {
+  await runCloudWorker();
 } else {
   // Nobody has to chat for setup to finish: a few seconds after the app starts the extension, resume a dead indexing job, apply a
   // queued folder change and finish labelling (the same pass every tool call also triggers).
