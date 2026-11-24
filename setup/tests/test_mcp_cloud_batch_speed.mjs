@@ -42,7 +42,7 @@ async function makeFiles(prefix, sizes) {
 const setOffline = files => fs.writeFile(dataless, files.join('\n') + '\n');
 
 async function session(env, run) {
-  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', ...roots], { env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, NB_TEST_DATALESS_LIST: dataless, NB_BRCTL: fakeBrctl, DATABRAIN_TEST_NO_AUTO_CLOUD: '1', DATABRAIN_TEST_CLOUD_MARGIN_BYTES: '0', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', ...roots], { env: { ...process.env, DATABRAIN_TEST_CLOUD_SUB_FILES: '100000' /* part 38: this test counts disk batches; the ChatGPT host's small sub-batches are tested in test_chatgpt_small_batches.mjs */, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, NB_TEST_DATALESS_LIST: dataless, NB_BRCTL: fakeBrctl, DATABRAIN_TEST_NO_AUTO_CLOUD: '1', DATABRAIN_TEST_CLOUD_MARGIN_BYTES: '0', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map();
   readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
   let n = 0;

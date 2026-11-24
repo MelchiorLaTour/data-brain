@@ -4204,8 +4204,14 @@ async function readToDownload(file, job) {
       const reader = testHook('DATABRAIN_TEST_DOWNLOAD_PROGRAM') || '/bin/cat';
       const child = spawn(reader, [file], { stdio: ['ignore', 'ignore', 'pipe'] });
       let settled = false; let stderr = '';
-      const finish = error => { if (settled) return; settled = true; clearTimeout(timer); if (job.activeChild === child) job.activeChild = null; if (error) reject(error); else resolve(); };
+      const finish = error => { if (settled) return; settled = true; clearTimeout(timer); clearInterval(cancelWatch); if (job.activeChild === child) job.activeChild = null; if (error) reject(error); else resolve(); };
       const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} finish(new Error('timed out')); }, Number(testHook('DATABRAIN_TEST_DOWNLOAD_TIMEOUT_MS')) || 120000);
+      // Part 38: a cancel sends SIGTERM (stopChild); a reader that is blocked in the kernel ignores it, so two seconds later it is killed outright and nobody waits for it.
+      const cancelWatch = setInterval(() => {
+        if (!job.cancelled) return;
+        clearInterval(cancelWatch);
+        setTimeout(() => { try { child.kill('SIGKILL'); } catch {} finish(new Error('Cancelled during the cloud download.')); }, Number(testHook('DATABRAIN_TEST_CANCEL_KILL_MS')) || 2000);
+      }, 200);
       job.activeChild = child;
       child.stderr.on('data', part => { if (stderr.length < 512) stderr += part; });
       child.on('error', finish);
@@ -4233,8 +4239,18 @@ async function readToDownload(file, job) {
     const listPath = datalessList;
     const rest = (await fs.readFile(listPath, 'utf8')).split('\n').filter(line => line && line !== file);
     await fs.writeFile(listPath, rest.join('\n') + (rest.length ? '\n' : ''));
+    // test only: "macOS takes a downloaded file back" N downloads later (files named offload-* every time, onceoff-* the first time only)
+    const offloadAfter = Number(testHook('DATABRAIN_TEST_OFFLOAD_AFTER_DOWNLOADS')) || 0;
+    if (offloadAfter) {
+      offloadSeq += 1;
+      const base = path.basename(file);
+      if (base.startsWith('offload-') || (base.startsWith('onceoff-') && !offloadedOnce.has(file))) { offloadedOnce.add(file); offloadWatch.push({ file, seq: offloadSeq }); }
+      for (const watch of offloadWatch.filter(w => offloadSeq - w.seq >= offloadAfter)) await fs.appendFile(listPath, `${watch.file}\n`);
+      offloadWatch = offloadWatch.filter(w => offloadSeq - w.seq < offloadAfter);
+    }
   }
 }
+let offloadSeq = 0; let offloadWatch = []; const offloadedOnce = new Set();
 
 function cloudFailureReason(error) {
   if (/timed out/i.test(error?.message || '')) return 'timed out';
@@ -4280,6 +4296,22 @@ async function planCloudFetch(state, args = {}, { scan = true } = {}) {
   return { pending, total, batches, roots: await validateStoredRoots(state), nameOnly };
 }
 
+// Part 38: which of these downloaded files really have an index row now (or were held back by the privacy screen, which is an answer too). A file that
+// macOS took back before the index step has neither: ingest-root.sh never makes a row for an online-only file.
+async function filesReachedIndex(files) {
+  const home = os.homedir();
+  const tildeOf = file => file.startsWith(`${home}/`) ? `~${file.slice(home.length)}` : file;
+  const rows = new Set();
+  try { for (const line of (await fs.readFile(path.join(mocDir, 'index.tsv'), 'utf8')).split('\n')) { const first = line.split('\t')[0]; if (first && !first.startsWith('#')) rows.add(first); } } catch {}
+  const privacy = await readPrivacy().catch(() => new Map());
+  const reached = new Set();
+  for (const file of files) {
+    const privacyStatus = (privacy.get(file) || privacy.get(tildeOf(file)))?.status;
+    if (rows.has(file) || rows.has(tildeOf(file)) || privacyStatus === 'held' || privacyStatus === 'excluded') reached.add(file);
+  }
+  return reached;
+}
+
 // Paths (absolute) that are indexed by name only, from moc/name-only.tsv (canonical ~ form on disk).
 async function readNameOnly() {
   const set = new Set();
@@ -4317,6 +4349,10 @@ async function cloudFetchTask(current, pending, batches, roots, nameOnly = []) {
     const failures = [];
     let skippedTotal = 0;
     const evictPath = path.join(stateDir, 'cloud-evict.json');
+    const failuresPath = path.join(stateDir, 'cloud-fetch-failures.tsv');
+    // Part 38 (ChatGPT host): the list grows as failures happen, so a run that is killed still leaves its failures; the Claude host writes it at the end.
+    const recordFailure = async line => { failures.push(line); if (chatgptMode) await fs.appendFile(failuresPath, `${line}\n`, { mode: 0o600 }).catch(() => {}); };
+    if (chatgptMode) await fs.writeFile(failuresPath, '', { mode: 0o600 }).catch(() => {});
     const nameOnlyBefore = (await readNameOnly()).size - nameOnly.length;
     try {
       // Part 36: documents that are indexed by name only get their row now (no download, no read); the engine scripts skip their content.
@@ -4329,38 +4365,65 @@ async function cloudFetchTask(current, pending, batches, roots, nameOnly = []) {
       }
       for (const [batchIndex, batch] of batches.entries()) {
         cloudFetchProgress.batch = batchIndex + 1;
-        const got = [];   // downloaded in this batch
-        const tried = [];   // part 36: every file this batch tried to download, also those that failed or timed out (they go back online-only too)
-        // Written before the first download: a worker killed at any point in the batch leaves the list, and the next run puts those files back online-only
-        // (evicting a file that was never downloaded does nothing).
-        if (chatgptMode) await fs.writeFile(evictPath, JSON.stringify(batch.filter(item => item.provider === 'iCloud Drive').map(item => item.file)), { mode: 0o600 }).catch(() => {});
-        try {
-          for (const item of batch) {
-            if (current.cancelled) throw new Error('Cancelled during the cloud download.');
-            current.message = `Cloud fetch: ${cloudFetchProgress.done} of ${cloudFetchProgress.total} files, batch ${batchIndex + 1} of ${batches.length} (${Math.round(cloudFetchProgress.done / cloudFetchProgress.total * 100)}%)`;
-            tried.push(item);
-            try { await readToDownload(item.file, current); got.push(item); }
-            catch (error) { cloudFetchProgress.failed += 1; failures.push(`${item.file}\t${cloudFailureReason(error)}`); }
-            cloudFetchProgress.done += 1;
+        // Part 38 (ChatGPT host): a batch is downloaded and indexed in small sub-batches (25 files or 2.5 minutes of downloading, whichever comes first), so
+        // macOS cannot take downloaded files back (a nearly full Mac does, within minutes) before they are indexed. The Claude host keeps one pass per batch.
+        const subFiles = chatgptMode ? (Number(testHook('DATABRAIN_TEST_CLOUD_SUB_FILES')) || 25) : Infinity;
+        const subMs = chatgptMode ? (Number(testHook('DATABRAIN_TEST_CLOUD_SUB_MS')) || 150000) : Infinity;
+        let rest = batch.slice();
+        while (rest.length) {
+          const got = [];   // downloaded in this sub-batch
+          const tried = [];   // every file this sub-batch tried to download, also those that failed or timed out (they go back online-only too)
+          const retry = [];   // downloaded, but online-only again when the index step ran: tried once more in the next sub-batch
+          const chunkStartedAt = Date.now();
+          let consumed = 0;
+          // Written before the first download: a worker killed at any point leaves the list, and the next run puts those files back online-only
+          // (evicting a file that was never downloaded does nothing).
+          if (chatgptMode) await fs.writeFile(evictPath, JSON.stringify(rest.slice(0, subFiles).filter(item => item.provider === 'iCloud Drive').map(item => item.file)), { mode: 0o600 }).catch(() => {});
+          try {
+            for (const item of rest) {
+              if (current.cancelled) throw new Error('Cancelled during the cloud download.');
+              current.message = `Cloud fetch: ${cloudFetchProgress.done} of ${cloudFetchProgress.total} files, batch ${batchIndex + 1} of ${batches.length} (${Math.round(cloudFetchProgress.done / cloudFetchProgress.total * 100)}%)`;
+              tried.push(item);
+              consumed += 1;
+              try { await readToDownload(item.file, current); got.push(item); }
+              catch (error) {
+                if (chatgptMode && current.cancelled) throw new Error('Cancelled during the cloud download.');
+                cloudFetchProgress.failed += 1; await recordFailure(`${item.file}\t${cloudFailureReason(error)}`);
+              }
+              if (!item.retried) cloudFetchProgress.done += 1;
+              if (tried.length >= subFiles || Date.now() - chunkStartedAt >= subMs) break;
+            }
+            if (got.length) {
+              if (testHook('DATABRAIN_TEST_CLOUD_AFTER_DOWNLOAD_MS')) await sleepMs(Number(testHook('DATABRAIN_TEST_CLOUD_AFTER_DOWNLOAD_MS')));   // test only: a place to cut the batch off
+              // If DataBrain stops here, the next indexing end puts these back online-only (evictFetchedCloudFiles).
+              const icloud = got.filter(item => item.provider === 'iCloud Drive').map(item => item.file);
+              if (icloud.length) await fs.writeFile(evictPath, JSON.stringify(icloud), { mode: 0o600 });
+              current.message = `Cloud fetch: ${cloudFetchProgress.done} of ${cloudFetchProgress.total} files, batch ${batchIndex + 1} of ${batches.length} (${Math.round(cloudFetchProgress.done / cloudFetchProgress.total * 100)}%). Indexing this batch.`;
+              await acquireLockWaiting(current, 'index-worker-lock.sqlite', current, 'Waiting for another DataBrain client to finish indexing; the cloud fetch carries on afterwards.');
+              try { await performFastRefresh(roots, { added: got.map(item => item.file), changed: [], deleted: [], untracked: [] }, current, { deferTail: true }); }
+              finally { await releaseIndexWorkerLock(current); }
+              indexedAny = true;
+              // A file that changed while it was read is not a failed batch: it is listed (path and reason) and the next batch carries on.
+              const changed = new Set();
+              for (const skipped of current.skippedFiles || []) { skippedTotal += 1; changed.add(skipped.file); await recordFailure(`${skipped.file}\t${skipped.reason}`); }
+              if (chatgptMode) {
+                // `indexed` counts files that really got an index row (or were held back by the privacy screen), not files handed to the index step.
+                const reached = await filesReachedIndex(got.map(item => item.file));
+                const missing = got.filter(item => !reached.has(item.file) && !changed.has(item.file));
+                cloudFetchProgress.indexed = (cloudFetchProgress.indexed || 0) + got.length - missing.length;
+                logStage(current, 'cloud-indexed', chunkStartedAt, `${missing.length} of ${got.length} were online-only again at index time`);
+                for (const item of missing) {
+                  if (item.retried) { cloudFetchProgress.failed += 1; await recordFailure(`${item.file}\toffloaded by macOS before indexing`); }
+                  else { item.retried = true; retry.push(item); }
+                }
+              } else cloudFetchProgress.indexed = (cloudFetchProgress.indexed || 0) + got.length;
+            }
+          } finally {
+            // Also when cancelled or when a pass failed: whatever this sub-batch downloaded from iCloud goes back online-only, so the disk never keeps more than one sub-batch.
+            await evictCloudFiles((chatgptMode ? tried : got).filter(item => item.provider === 'iCloud Drive').map(item => item.file));
+            await fs.unlink(evictPath).catch(() => {});
           }
-          if (got.length) {
-            if (testHook('DATABRAIN_TEST_CLOUD_AFTER_DOWNLOAD_MS')) await sleepMs(Number(testHook('DATABRAIN_TEST_CLOUD_AFTER_DOWNLOAD_MS')));   // test only: a place to cut the batch off
-            // If DataBrain stops here, the next indexing end puts these back online-only (evictFetchedCloudFiles).
-            const icloud = got.filter(item => item.provider === 'iCloud Drive').map(item => item.file);
-            if (icloud.length) await fs.writeFile(evictPath, JSON.stringify(icloud), { mode: 0o600 });
-            current.message = `Cloud fetch: ${cloudFetchProgress.done} of ${cloudFetchProgress.total} files, batch ${batchIndex + 1} of ${batches.length} (${Math.round(cloudFetchProgress.done / cloudFetchProgress.total * 100)}%). Indexing this batch.`;
-            await acquireLockWaiting(current, 'index-worker-lock.sqlite', current, 'Waiting for another DataBrain client to finish indexing; the cloud fetch carries on afterwards.');
-            try { await performFastRefresh(roots, { added: got.map(item => item.file), changed: [], deleted: [], untracked: [] }, current, { deferTail: true }); }
-            finally { await releaseIndexWorkerLock(current); }
-            indexedAny = true;
-            cloudFetchProgress.indexed = (cloudFetchProgress.indexed || 0) + got.length;   // part 35: what a restart can count as progress (files that reached the index)
-            // A file that changed while it was read is not a failed batch: it is listed (path and reason) and the next batch carries on.
-            for (const skipped of current.skippedFiles || []) { skippedTotal += 1; failures.push(`${skipped.file}\t${skipped.reason}`); }
-          }
-        } finally {
-          // Also when cancelled or when a pass failed: whatever this batch downloaded from iCloud goes back online-only, so the disk never keeps more than one batch.
-          await evictCloudFiles((chatgptMode ? tried : got).filter(item => item.provider === 'iCloud Drive').map(item => item.file));
-          await fs.unlink(evictPath).catch(() => {});
+          rest = [...retry, ...rest.slice(consumed)];
         }
       }
     } finally {
@@ -4374,7 +4437,7 @@ async function cloudFetchTask(current, pending, batches, roots, nameOnly = []) {
       }
       cloudFetchProgress.running = false;
       // Why each download failed (a short reason, never file contents), kept in the state folder for databrain_diagnostics.
-      await fs.writeFile(path.join(stateDir, 'cloud-fetch-failures.tsv'), failures.length ? `${failures.join('\n')}\n` : '', { mode: 0o600 }).catch(() => {});
+      if (!chatgptMode) await fs.writeFile(failuresPath, failures.length ? `${failures.join('\n')}\n` : '', { mode: 0o600 }).catch(() => {});
     }
     scheduleMaintenance();
     const nameOnlyNow = Math.max(0, (await readNameOnly()).size - nameOnlyBefore);
@@ -4523,16 +4586,18 @@ async function runCloudWorker() {
       signalled = true;
       const saved = await readState().catch(() => ({}));
       cancelRequested = saved.cloudFetchJob?.status === 'cancelling';
-      if (job) { job.endLogged = true; logStage(job, 'job-end', Date.parse(job.startedAt) || Date.now(), cancelRequested ? 'cancelled: the user cancelled the cloud download' : 'interrupted: the worker was stopped (SIGTERM) while the job was running'); job.cancel(); }
+      if (job) { job.endLogged = true; job.cancel(); }   // the job-end line is written below, after the job has really stopped (part 38)
       else process.exit(0);
     });
-    await evictFetchedCloudFiles(true).catch(() => {});   // a worker cut off mid-batch left downloaded files: put them back online-only before anything else
+    const recovered = await evictFetchedCloudFiles(true).catch(() => 0);   // a worker cut off mid-batch left downloaded files: put them back online-only before anything else
+    logStage(logJob, 'cloud-worker', startedMs, `recovery eviction: ${recovered} file(s) of an earlier, cut-off batch put back online-only`);
     const plan = await planCloudFetch(state, { provider }, { scan: !reuseScan });
     if (plan.text) { await setCloudJob({ id, status: plan.refused ? 'stopped' : 'complete', message: plan.text, finishedAt: new Date().toISOString() }); logStage(logJob, 'job-end', startedMs, `${plan.refused ? 'failed' : 'complete'}: ${plan.text.slice(0, 120)}`); return; }
     job = startJob('cloud fetch', current => cloudFetchTask(current, plan.pending, plan.batches, plan.roots, plan.nameOnly));
     timer = setInterval(() => { writeCloudProgress(id, true, job.message); }, 1000);
     await job.done;
     clearInterval(timer); timer = null;
+    if (signalled) logStage(job, 'job-end', Date.parse(job.startedAt) || Date.now(), cancelRequested ? 'cancelled: the user cancelled the cloud download' : 'interrupted: the worker was stopped (SIGTERM) while the job was running');
     await writeCloudProgress(id, false, job.message);
     const status = cancelRequested ? 'cancelled' : signalled ? 'interrupted' : job.status === 'complete' ? 'complete' : 'failed';
     await setCloudJob({ id, status, message: String(job.message || '').slice(0, 300), finishedAt: new Date().toISOString() });
@@ -4584,12 +4649,13 @@ async function evictCloudFiles(files) {
 
 // iCloud files that were only downloaded for indexing go back to online-only once indexed.
 async function evictFetchedCloudFiles(force = false) {
-  if (!force && chatgptMode && cloudWorkerRunning(await readState().catch(() => ({})))) return;   // the worker owns that list while it runs
+  if (!force && chatgptMode && cloudWorkerRunning(await readState().catch(() => ({})))) return 0;   // the worker owns that list while it runs
   const listPath = path.join(stateDir, 'cloud-evict.json');
   let files;
-  try { files = JSON.parse(await fs.readFile(listPath, 'utf8')); } catch { return; }
+  try { files = JSON.parse(await fs.readFile(listPath, 'utf8')); } catch { return 0; }
   await fs.unlink(listPath).catch(() => {});
   await evictCloudFiles(Array.isArray(files) ? files : []);
+  return Array.isArray(files) ? files.length : 0;
 }
 
 async function readPrivacy() {
