@@ -37,7 +37,8 @@ nb_dataless_paths < "$tmpd/all" | sort -u > "$tmpd/cloud"
 /usr/bin/perl -e '
   use strict; use Digest::SHA qw(sha1_hex);
   my ($moc, $home, $hastext, $privfile, $skipout) = @ARGV;
-  my %priv;
+  my %priv; my %nameonly;
+  if (open(my $no, "<", "$moc/name-only.tsv")) { while (my $l = <$no>) { chomp $l; my ($pp) = split /\t/, $l; $nameonly{$pp} = 1 if defined $pp } close $no }
   if ($privfile ne "" && open(my $pv, "<", $privfile)) { while (my $l = <$pv>) { chomp $l; my ($st, $pp) = split /\t/, $l; next unless defined $pp; $priv{$pp} = $st } close $pv }
   my (%final, %finalfp, $reportmtime);
   if (open(my $rp, "<", "$moc/extract-report.tsv")) {
@@ -52,6 +53,7 @@ nb_dataless_paths < "$tmpd/all" | sort -u > "$tmpd/cloud"
     chomp $f; next if $f eq "";
     my $tilde = (index($f, $home . "/") == 0) ? "~" . substr($f, length($home)) : $f;
     my $done = 0;
+    if ($nameonly{$f} || $nameonly{$tilde}) { print $sk "$f\tname_only\n"; next }
     my ($ps) = grep { defined } map { $priv{$_} } ($f, $tilde);
     if (defined $ps && ($ps eq "excluded" || $ps eq "held")) { print $sk "$f\t$ps\n"; next }
     for my $p ($f, $tilde) {

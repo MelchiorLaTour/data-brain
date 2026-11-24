@@ -4044,6 +4044,7 @@ function engineEnv() {
     NB_CANON_ROOTS_FILE: rootsPath,
     NB_CANON_ROOT_IDENTITIES_FILE: rootIdentitiesPath,
     ...(!codexMode && privacyPath ? { NB_PRIVACY_FILE: privacyPath } : {}),
+    ...(chatgptMode ? { NB_NAME_ONLY: '1' } : {}),   // part 36: large documents and workbooks are indexed by name only (bin/name-only.sh)
   };
 }
 
@@ -4127,11 +4128,11 @@ async function readCloudPending() {
 // Online-only files the scan will not queue: excluded or held at the privacy review (never downloaded), or an earlier read ended with no text
 // (a scan, a failed read) and the file has not changed since. Counted for the user, never part of "waiting to download".
 async function readCloudSkipped() {
-  const out = { excluded: 0, held: 0, noText: 0 };
+  const out = { excluded: 0, held: 0, noText: 0, nameOnly: 0 };
   try {
     for (const line of (await fs.readFile(path.join(mocDir, 'cloud-skipped.tsv'), 'utf8')).split('\n')) {
       const reason = line.split('\t')[1];
-      if (reason === 'excluded') out.excluded += 1; else if (reason === 'held') out.held += 1; else if (reason === 'no_text') out.noText += 1;
+      if (reason === 'excluded') out.excluded += 1; else if (reason === 'held') out.held += 1; else if (reason === 'no_text') out.noText += 1; else if (reason === 'name_only') out.nameOnly += 1;
     }
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   return out;
@@ -4142,7 +4143,8 @@ function cloudSkippedLine(skipped) {
   if (skipped.noText) parts.push(`${skipped.noText} online-only file(s) have no readable text (scans or files that could not be read earlier)`);
   const privateLine = skipped.excluded || skipped.held ? PRIVATE_SENTENCE : '';   // Part 22: no count of private files
   const text = parts.length ? `${parts.join('; ')}. They are not downloaded and are not counted as waiting.` : '';
-  return [text, privateLine].filter(Boolean).join(' ');
+  const nameOnlyLine = skipped.nameOnly ? `${skipped.nameOnly} large document(s) and workbook(s) (more than 100 pages, or a workbook) are indexed by name only: they are found by their name, their content is not downloaded or read.` : '';
+  return [text, nameOnlyLine, privateLine].filter(Boolean).join(' ');
 }
 
 async function readCloudShortcuts() {
@@ -4195,6 +4197,26 @@ function freeKilobytes() {
 }
 
 async function readToDownload(file, job) {
+  if (chatgptMode) {
+    // Part 36: a download that blocks below Node's stream layer cannot be ended by stream.destroy (one 699 MB file sat 22 minutes with 0 bytes and held the
+    // whole batch). The read is a child process with a hard kill: after the limit (2 minutes) the file is skipped as "timed out" and the batch carries on.
+    await new Promise((resolve, reject) => {
+      const reader = testHook('DATABRAIN_TEST_DOWNLOAD_PROGRAM') || '/bin/cat';
+      const child = spawn(reader, [file], { stdio: ['ignore', 'ignore', 'pipe'] });
+      let settled = false; let stderr = '';
+      const finish = error => { if (settled) return; settled = true; clearTimeout(timer); if (job.activeChild === child) job.activeChild = null; if (error) reject(error); else resolve(); };
+      const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} finish(new Error('timed out')); }, Number(testHook('DATABRAIN_TEST_DOWNLOAD_TIMEOUT_MS')) || 120000);
+      job.activeChild = child;
+      child.stderr.on('data', part => { if (stderr.length < 512) stderr += part; });
+      child.on('error', finish);
+      child.on('close', code => {
+        if (code === 0) return finish();
+        const error = new Error(`read failed (${code})`);
+        error.code = /permission denied/i.test(stderr) ? 'EACCES' : /no such file/i.test(stderr) ? 'ENOENT' : /input\/output/i.test(stderr) ? 'EIO' : 'EREAD';
+        finish(error);
+      });
+    });
+  } else
   await new Promise((resolve, reject) => {
     const stream = createReadStream(file);
     const timer = setTimeout(() => { stream.destroy(new Error('timed out')); }, 120000);
@@ -4234,7 +4256,17 @@ async function planCloudFetch(state, args = {}, { scan = true } = {}) {
   if (scan) await runEngine('cloud-scan.sh', [], { message: 'Looking for online-only files. Nothing is downloaded.' });
   let pending = await readCloudPending();
   if (args.provider) pending = pending.filter(item => item.provider.toLowerCase().includes(String(args.provider).toLowerCase()));
-  if (!pending.length) return { text: 'There are no online-only files to download.' };
+  // ChatGPT host (part 36): large documents and workbooks are never downloaded; they are indexed by name only. Spotlight knows a page count for an online-only file.
+  let nameOnly = [];
+  if (chatgptMode && pending.length) {
+    const list = path.join(mocDir, `.name-only-list.${randomUUID()}.tmp`);
+    await fs.writeFile(list, pending.map(item => item.file).join('\n') + '\n', { mode: 0o600, flag: 'wx' });
+    try { await runEngine('name-only.sh', ['--paths', list], { message: 'Checking which documents are indexed by name only. Nothing is downloaded.' }); } finally { await fs.rm(list, { force: true }); }
+    const marked = await readNameOnly();
+    nameOnly = pending.filter(item => marked.has(item.file)).map(item => item.file);
+    pending = pending.filter(item => !marked.has(item.file));
+  }
+  if (!pending.length && !nameOnly.length) return { text: 'There are no online-only files to download.' };
   const total = pending.reduce((sum, item) => sum + item.size, 0);
   // Batches: download a few files, index their text, put the iCloud ones back online-only, then the next batch. The disk only ever has to
   // hold ONE batch (plus room to work), not every file at once, so this works on a nearly full Mac.
@@ -4245,7 +4277,15 @@ async function planCloudFetch(state, args = {}, { scan = true } = {}) {
   if (freeBytes < needed) {
     return { text: `Not enough free disk space, so nothing was downloaded. Files are downloaded in batches, and the largest batch (${Math.max(...batches.map(batch => batch.length))} file(s), about ${humanSize(largest)}) needs room to work too (${humanSize(needed)} in all) and this Mac has ${humanSize(freeBytes)} free. Space can be freed, or one drive at a time can be fetched with the provider option.`, refused: true };
   }
-  return { pending, total, batches, roots: await validateStoredRoots(state) };
+  return { pending, total, batches, roots: await validateStoredRoots(state), nameOnly };
+}
+
+// Paths (absolute) that are indexed by name only, from moc/name-only.tsv (canonical ~ form on disk).
+async function readNameOnly() {
+  const set = new Set();
+  try { for (const line of (await fs.readFile(path.join(mocDir, 'name-only.tsv'), 'utf8')).split('\n')) { const p = line.split('\t')[0]; if (p) set.add(p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p); } }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  return set;
 }
 
 async function beginCloudFetch(args = {}) {
@@ -4256,18 +4296,20 @@ async function beginCloudFetch(args = {}) {
   if (chatgptMode && cloudWorkerRunning(state)) return 'The cloud download is already running in the background (it carries on if ChatGPT closes). Check databrain_setup_status for "Cloud fetch: N of M".';
   const plan = await planCloudFetch(state, args);
   if (plan.text) return plan.text;
-  const { pending, total, batches, roots } = plan;
+  const { pending, total, batches, roots, nameOnly = [] } = plan;
+  const nameOnlyText = nameOnly.length ? ` ${nameOnly.length} large document${nameOnly.length === 1 ? '' : 's'} or workbook${nameOnly.length === 1 ? '' : 's'} (more than 100 pages, or a workbook) ${nameOnly.length === 1 ? 'is' : 'are'} indexed by name only and not downloaded.` : '';
   // ChatGPT closes and restarts DataBrain servers all the time: the download runs in its own detached process, which resumes and restarts by itself.
   if (chatgptMode) {
     const id = await launchCloudWorker(state, { provider: args.provider, reuseScan: true });
-    return `Downloading ${pending.length} online-only file${pending.length === 1 ? '' : 's'} (${humanSize(total)}) for indexing, as agreed at setup (job ${id}). They are fetched in ${batches.length} batch${batches.length === 1 ? '' : 'es'} (download, index, put iCloud files back online-only, next batch), so only one batch is ever on the disk. It runs in the background and carries on if ChatGPT closes. The status shows "Cloud fetch: N of M".`;
+    if (!pending.length) return `Nothing needs downloading (job ${id}).${nameOnlyText} They are being added by name; the status shows when that is done.`;
+    return `Downloading ${pending.length} online-only file${pending.length === 1 ? '' : 's'} (${humanSize(total)}) for indexing, as agreed at setup (job ${id}). They are fetched in ${batches.length} batch${batches.length === 1 ? '' : 'es'} (download, index, put iCloud files back online-only, next batch), so only one batch is ever on the disk. It runs in the background and carries on if ChatGPT closes. The status shows "Cloud fetch: N of M".${nameOnlyText}`;
   }
   const job = startJob('cloud fetch', current => cloudFetchTask(current, pending, batches, roots));
   return `Downloading ${pending.length} online-only file${pending.length === 1 ? '' : 's'} (${humanSize(total)}) for indexing, as agreed at setup (job ${job.id}). They are fetched in ${batches.length} batch${batches.length === 1 ? '' : 'es'} (download, index, put iCloud files back online-only, next batch), so only one batch is ever on the disk. The status shows "Cloud fetch: N of M".`;
 }
 
 // The whole download, batch by batch. Runs inside a job of the server (Claude host) or inside the detached worker (ChatGPT host).
-async function cloudFetchTask(current, pending, batches, roots) {
+async function cloudFetchTask(current, pending, batches, roots, nameOnly = []) {
     // The user agreed to these downloads in the chat at setup (see CLOUD_DOWNLOAD_STATEMENT); there is no second question.
     cloudFetchProgress = { total: pending.length, done: 0, failed: 0, running: true, batch: 0, batches: batches.length };
     const fetchStartedAt = Date.now();
@@ -4275,10 +4317,20 @@ async function cloudFetchTask(current, pending, batches, roots) {
     const failures = [];
     let skippedTotal = 0;
     const evictPath = path.join(stateDir, 'cloud-evict.json');
+    const nameOnlyBefore = (await readNameOnly()).size - nameOnly.length;
     try {
+      // Part 36: documents that are indexed by name only get their row now (no download, no read); the engine scripts skip their content.
+      if (nameOnly.length) {
+        current.message = `Cloud fetch: adding ${nameOnly.length} large document(s) and workbook(s) by name only.`;
+        await acquireLockWaiting(current, 'index-worker-lock.sqlite', current, 'Waiting for another DataBrain client to finish indexing; the cloud fetch carries on afterwards.');
+        try { await performFastRefresh(roots, { added: nameOnly, changed: [], deleted: [], untracked: [] }, current, { deferTail: true }); }
+        finally { await releaseIndexWorkerLock(current); }
+        indexedAny = true;
+      }
       for (const [batchIndex, batch] of batches.entries()) {
         cloudFetchProgress.batch = batchIndex + 1;
         const got = [];   // downloaded in this batch
+        const tried = [];   // part 36: every file this batch tried to download, also those that failed or timed out (they go back online-only too)
         // Written before the first download: a worker killed at any point in the batch leaves the list, and the next run puts those files back online-only
         // (evicting a file that was never downloaded does nothing).
         if (chatgptMode) await fs.writeFile(evictPath, JSON.stringify(batch.filter(item => item.provider === 'iCloud Drive').map(item => item.file)), { mode: 0o600 }).catch(() => {});
@@ -4286,6 +4338,7 @@ async function cloudFetchTask(current, pending, batches, roots) {
           for (const item of batch) {
             if (current.cancelled) throw new Error('Cancelled during the cloud download.');
             current.message = `Cloud fetch: ${cloudFetchProgress.done} of ${cloudFetchProgress.total} files, batch ${batchIndex + 1} of ${batches.length} (${Math.round(cloudFetchProgress.done / cloudFetchProgress.total * 100)}%)`;
+            tried.push(item);
             try { await readToDownload(item.file, current); got.push(item); }
             catch (error) { cloudFetchProgress.failed += 1; failures.push(`${item.file}\t${cloudFailureReason(error)}`); }
             cloudFetchProgress.done += 1;
@@ -4306,7 +4359,7 @@ async function cloudFetchTask(current, pending, batches, roots) {
           }
         } finally {
           // Also when cancelled or when a pass failed: whatever this batch downloaded from iCloud goes back online-only, so the disk never keeps more than one batch.
-          await evictCloudFiles(got.filter(item => item.provider === 'iCloud Drive').map(item => item.file));
+          await evictCloudFiles((chatgptMode ? tried : got).filter(item => item.provider === 'iCloud Drive').map(item => item.file));
           await fs.unlink(evictPath).catch(() => {});
         }
       }
@@ -4324,7 +4377,8 @@ async function cloudFetchTask(current, pending, batches, roots) {
       await fs.writeFile(path.join(stateDir, 'cloud-fetch-failures.tsv'), failures.length ? `${failures.join('\n')}\n` : '', { mode: 0o600 }).catch(() => {});
     }
     scheduleMaintenance();
-    return `Cloud fetch: downloaded and indexed ${cloudFetchProgress.done - cloudFetchProgress.failed - skippedTotal} of ${cloudFetchProgress.total} files${cloudFetchProgress.failed ? `, ${cloudFetchProgress.failed} could not be downloaded` : ''}${skippedTotal ? `, ${skippedTotal} could not be indexed this time (changed while being read; the next fetch retries them)` : ''}.`;
+    const nameOnlyNow = Math.max(0, (await readNameOnly()).size - nameOnlyBefore);
+    return `Cloud fetch: downloaded and indexed ${cloudFetchProgress.done - cloudFetchProgress.failed - skippedTotal} of ${cloudFetchProgress.total} files${nameOnlyNow ? `, ${nameOnlyNow} large document(s) or workbook(s) indexed by name only` : ''}${cloudFetchProgress.failed ? `, ${cloudFetchProgress.failed} could not be downloaded` : ''}${skippedTotal ? `, ${skippedTotal} could not be indexed this time (changed while being read; the next fetch retries them)` : ''}.`;
 }
 
 // ---- Part 35: the ChatGPT host's cloud download runs in a detached worker ----
@@ -4475,7 +4529,7 @@ async function runCloudWorker() {
     await evictFetchedCloudFiles(true).catch(() => {});   // a worker cut off mid-batch left downloaded files: put them back online-only before anything else
     const plan = await planCloudFetch(state, { provider }, { scan: !reuseScan });
     if (plan.text) { await setCloudJob({ id, status: plan.refused ? 'stopped' : 'complete', message: plan.text, finishedAt: new Date().toISOString() }); logStage(logJob, 'job-end', startedMs, `${plan.refused ? 'failed' : 'complete'}: ${plan.text.slice(0, 120)}`); return; }
-    job = startJob('cloud fetch', current => cloudFetchTask(current, plan.pending, plan.batches, plan.roots));
+    job = startJob('cloud fetch', current => cloudFetchTask(current, plan.pending, plan.batches, plan.roots, plan.nameOnly));
     timer = setInterval(() => { writeCloudProgress(id, true, job.message); }, 1000);
     await job.done;
     clearInterval(timer); timer = null;

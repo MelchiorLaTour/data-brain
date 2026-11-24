@@ -42,7 +42,7 @@ cp "$ROOT/LICENSE" "$PAYLOAD/LICENSE"
 # Only the engine scripts the server calls, as in the Claude package: no corpus-derived dictionaries or other repository content.
 ENGINE_BIN_FILES=(
   build-fts.sh build-fts-fr.sh build-index.sh canon.sh extract.sh fts.sh index-add.sh ingest-root.sh inventory.sh look.sh
-  relationships.sh rebuild.sh refresh.sh taxonomy.sh prune-missing.sh privacy.pl privacy-names.sh cloud-scan.sh
+  relationships.sh rebuild.sh refresh.sh taxonomy.sh prune-missing.sh privacy.pl privacy-names.sh cloud-scan.sh name-only.sh
 )
 for file in "${ENGINE_BIN_FILES[@]}"; do
   [ -f "$ROOT/bin/$file" ] || { echo "build: missing required engine script bin/$file" >&2; exit 2; }

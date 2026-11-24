@@ -73,6 +73,11 @@ while IFS= read -r -d '' f; do printf '%s\n' "$f"; done < "$relative" | sort > "
 dropped="$tmpd/dropped"; : > "$dropped"
 comm -23 "$found" "$existing" > "$tmpd/candidates"
 nb_dataless_paths < "$tmpd/candidates" | sort > "$tmpd/cloud"
+# ChatGPT host: a large document or workbook that is indexed by name only gets its row even while it is online-only (its content is never read).
+if [ -s "$tmpd/cloud" ] && [ -s "$MOC/name-only.tsv" ]; then
+  /usr/bin/awk -F'\t' -v h="$HOME" '{ p = $1; if (substr(p, 1, 1) == "~") p = h substr(p, 2); print p }' "$MOC/name-only.tsv" | sort > "$tmpd/nameonly"
+  comm -23 "$tmpd/cloud" "$tmpd/nameonly" > "$tmpd/cloud-rest"; mv -f "$tmpd/cloud-rest" "$tmpd/cloud"
+fi
 if [ -s "$tmpd/cloud" ]; then comm -23 "$tmpd/candidates" "$tmpd/cloud" > "$tmpd/local"; else cp "$tmpd/candidates" "$tmpd/local"; fi
 if [ -n "${NB_PRIVACY_FILE:-}" ]; then
   /usr/bin/perl "$ROOT/bin/privacy.pl" filter < "$tmpd/local" > "$tmpd/kept" || { echo 'ingest-root: privacy screen failed' >&2; exit 2; }

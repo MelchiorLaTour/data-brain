@@ -129,6 +129,10 @@ derive_keywords() {
 
 is_offloaded() { nb_is_dataless "$1"; }
 
+# ChatGPT host: a large document or a workbook is indexed by name only (bin/name-only.sh). Nothing here changes unless the server sets NB_NAME_ONLY=1.
+name_only=0
+[ "${NB_NAME_ONLY:-}" = 1 ] && [ -f "$ROOT/bin/name-only.sh" ] && source "$ROOT/bin/name-only.sh"
+
 # Final outcomes are remembered with the file's size and mtime (never ctime: iCloud moves that alone). A file that ends in one of these is not
 # opened again, and an online-only one is not downloaded again, until its size or mtime changes.
 szm() { stat -f '%z:%m' "$1" 2>/dev/null || true; }
@@ -210,6 +214,16 @@ while IFS=$'\t' read -r path title themes keywords; do
 
   hash="$(printf '%s' "$path" | shasum | cut -c1-16)"
   out="$EXDIR/$hash.txt"
+  # Name only (ChatGPT host): never downloaded, opened or read, whether it is online-only or already on this Mac. A file that already has an extract keeps it.
+  if [ "${NB_NAME_ONLY:-}" = 1 ] && [ ! -s "$out" ]; then
+    case "$ext" in
+      pdf|docx|doc|pages|rtf)
+        no_reason="$(nb_name_only_reason "$f")"
+        if [ -n "$no_reason" ]; then
+          nb_name_only_record "$path" "$no_reason"; name_only=$((name_only+1)); printf '%s\tname_only\n' "$path" >> "$REPORT_TMP"; continue
+        fi ;;
+    esac
+  fi
   # A file that is online-only at this point (never indexed before) is downloaded FIRST, by reading it once, and only then fingerprinted:
   # macOS changes a file's ctime when it downloads it, so a fingerprint taken before the download could never match the one taken after
   # (every such file failed as source_changed_during_copy). Once it is local, the checks below are unchanged: a file that really changes
