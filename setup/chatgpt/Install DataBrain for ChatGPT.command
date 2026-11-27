@@ -105,7 +105,9 @@ trap 'cleanup; rm -f "$BLOCK_FILE" "$NEW_CONFIG"' EXIT
 {
   printf '[mcp_servers.databrain]\n'
   printf 'command = %s\n' "$(toml_string "$NODE_DEST")"
-  printf 'args = [%s, "--databrain-client", "chatgpt"]\n' "$(toml_string "$SERVER_DEST")"
+  printf 'args = [%s, "--databrain-client", "chatgpt", "--databrain-desktop-only"]\n' "$(toml_string "$SERVER_DEST")"
+  # Part 41: Codex in Terminal reads this same file. Only the ChatGPT app's app-server sets this variable; DataBrain stands down without it.
+  printf 'env_vars = ["CODEX_INTERNAL_ORIGINATOR_OVERRIDE"]\n'
   printf 'startup_timeout_sec = 30\n'
   # The folder picker waits for the user's click inside one tool call.
   printf 'tool_timeout_sec = 1200\n'

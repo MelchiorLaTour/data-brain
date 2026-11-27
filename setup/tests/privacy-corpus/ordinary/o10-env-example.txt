@@ -1,0 +1,7 @@
+# .env.example – copy to .env and fill in
+DB_HOST=localhost
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PASSWORD}
+SECRET_KEY=${SECRET_KEY}
+API_KEY=
+password: <your password>

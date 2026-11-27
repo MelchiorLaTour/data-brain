@@ -67,6 +67,23 @@ const testRoots = process.env.DATABRAIN_TEST_SOURCE_ROOTS
 const SERVER_VERSION = chatgptMode
   ? (() => { try { const text = readFileSync(path.resolve(here, '../chatgpt/VERSION'), 'utf8').trim(); return /^\d+\.\d+\.\d+$/.test(text) ? text : 'unknown'; } catch { return 'unknown'; } })()
   : '0.1.48';
+// Part 41: the ChatGPT app and Codex in Terminal both read ~/.codex/config.toml and both send clientInfo "codex-mcp-client". Only the ChatGPT app's
+// app-server has CODEX_INTERNAL_ORIGINATOR_OVERRIDE, which the installer's env_vars line forwards. Without it, stand down: no tools, no instructions,
+// no background work, nothing written. Older installs (no --databrain-desktop-only) behave as before.
+if (chatgptMode && process.argv.includes('--databrain-desktop-only') && !process.env.CODEX_INTERNAL_ORIGINATOR_OVERRIDE?.trim()) {
+  const reply = message => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
+  for await (const line of readline.createInterface({ input: process.stdin, crlfDelay: Infinity })) {
+    let request; try { request = JSON.parse(line); } catch { continue; }
+    const { id, method, params = {} } = request;
+    if (id === undefined) continue;
+    if (method === 'initialize') reply({ id, result: { protocolVersion: params.protocolVersion || '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'databrain', version: SERVER_VERSION }, instructions: '' } });
+    else if (method === 'tools/list') reply({ id, result: { tools: [] } });
+    else if (method === 'tools/call') reply({ id, result: { content: [{ type: 'text', text: 'DataBrain for the ChatGPT app is not active in the Codex terminal.' }] } });
+    else if (method === 'ping') reply({ id, result: {} });
+    else reply({ id, error: { code: -32601, message: `Method not found: ${method}` } });
+  }
+  process.exit(0);
+}
 // No folder chosen in settings: DataBrain goes in the home folder (~/DataBrain), so nobody has to pick a location.
 // The brain lives in the home folder: ~/DataBrain, or ~/DataBrain 2, 3, ... when that name is taken by something that
 // is not ours. A brain this extension already set up (it has a state file) is found again by the same walk, and an
@@ -5090,6 +5107,7 @@ async function performIndexingContents(roots, refresh, current, commitState) {
   let rescreened = false;
   if (refresh) {
     await dropApplicationsFileRows(selectedRoots, current);
+    await releaseContentHoldsForNewRules();
     for (const root of roots) {
       await setIndexProgress(current, 'Refreshing an approved source folder.');
       await runEngine('ingest-root.sh', [root], current);
@@ -5692,7 +5710,9 @@ function holdLowPriority(job, ms) {
 // (kept or excluded) keeps that decision (privacy.pl filter). Held notes leave the index when extract.sh prunes it, which runs right after.
 // Only plain notes that sit inside an approved folder are read here (no links, no moved paths); app items are screened by screenAppContent.
 // The privacy rules changed in 0.1.38 (wider password labels, email + token pairs, card words): once per brain, every indexed note is screened again.
-const PRIVACY_RULES_VERSION = '0.1.38';
+// Part 40 (0.2.1): the content rules hold far fewer ordinary files (school projects held for "Code: Python", "first pass:", a student number beside an
+// email). On this re-check, a file the old rules held for its TEXT and that the user never decided about is screened again (releaseContentHoldsForNewRules).
+const PRIVACY_RULES_VERSION = '0.2.1-part40';
 // 0.1.42: an index screened under older rules is not shown until every note has been screened again AND the held ones have left the index
 // (the version is recorded only when the whole full refresh finished, so a failure keeps the gate closed). Until then search, read and the abstain
 // check answer with one plain sentence: not even a held note's name comes out. The re-check starts at server start, without waiting for a question.
@@ -5746,6 +5766,17 @@ async function rescreenChangedNotes(files, roots) {
   }
   return rulesStale;   // true: every indexed note was screened, so a caller that then prunes and rebuilds in full records the version (recordPrivacyRulesVersion)
 }
+// Part 40: before a re-check under changed rules ingests anything, the held lines of files held for their TEXT, with no decision from the user, are
+// dropped. Those files then come in as new files: a note is screened at ingest, a document before its extract is published, and anything the current
+// rules still find private is held again. Name and folder holds and the user's own decisions (kept, excluded) are not touched. The answer gate
+// (privacyRecheckGate) stays closed until the whole refresh has finished, so nothing is shown in between.
+async function releaseContentHoldsForNewRules() {
+  if (codexMode || !privacyPath) return;
+  if ((await readState()).privacyRulesVersion === PRIVACY_RULES_VERSION) return;
+  const released = spawnSync('/usr/bin/perl', [path.join(engine, 'bin', 'privacy.pl'), 'release-content-holds'], { encoding: 'utf8', env: engineEnv() });
+  if (released.status !== 0) throw new Error('The privacy list could not be prepared for the updated rules; the refresh stopped before anything was indexed.');
+  if (released.stdout.trim()) await fs.unlink(privacyReviewPath()).catch(() => {});   // the review file named those files; the next list writes it again
+}
 // Written only when the WHOLE full refresh is done (held notes pruned, search rebuilt): a refresh that fails halfway leaves the gate closed.
 async function recordPrivacyRulesVersion() {
   await writeState({ ...(await readState()), privacyRulesVersion: PRIVACY_RULES_VERSION });
@@ -5783,6 +5814,7 @@ async function performAutoRefresh(roots, current, known = null) {
   await testUpdateDelay();
   await dropApplicationsFileRows(roots, current);
   current.skippedFiles = [];
+  await releaseContentHoldsForNewRules();
   for (const root of fileRoots(roots)) { await runEngine('ingest-root.sh', [root], current); await collectIngestSkipped(current); }
   await runEngine('prune-missing.sh', [], current);
   assertSafeDataHome();

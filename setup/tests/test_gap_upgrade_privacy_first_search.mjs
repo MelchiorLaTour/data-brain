@@ -79,7 +79,7 @@ try {
   assert(!leaksText(firstRead), 'FIRST read returned private text');
   if (scenario === 'stage') { console.log('PASS upgrade privacy gate at stage indexing'); process.exitCode = 0; }
   else {
-  await until(async () => { const st = await state(); return st.privacyRulesVersion === '0.1.38' && (scenario === 'start' || st.stage === 'ready'); }, 'rules version recorded and the refresh finished', 240000);
+  await until(async () => { const st = await state(); return st.privacyRulesVersion === '0.2.1-part40' && (scenario === 'start' || st.stage === 'ready'); }, 'rules version recorded and the refresh finished', 240000);
   if (scenario === 'start') await idle(server); else await sleep(1500);
   const after = await server.tool('databrain_search', { query: 'upgradeprivatemarker' });
   assert(!leaks(after), `after the re-screen the note is held:\n${after}`);

@@ -34,7 +34,7 @@ try {
   await fs.writeFile(statePath, JSON.stringify(before, null, 2));
   await fs.writeFile(path.join(docs, 'ordinary.md'), '# Garden\nprivacyshapesmarker tomatoes need staking in July.\n');
   await tool('databrain_refresh');
-  await until(async () => (await state()).privacyRulesVersion === '0.1.38', 'rules version recorded after a refresh', 120000);
+  await until(async () => (await state()).privacyRulesVersion === '0.2.1-part40', 'rules version recorded after a refresh', 120000);
   assert((await index()).includes('ordinary.md'), 'the ordinary note is still indexed after the re-screen');
   console.log('PASS: login pair, short labels and a card with a card word are held; chance-Luhn tables and ordinary notes stay; the rules version is recorded after a refresh');
 } finally {

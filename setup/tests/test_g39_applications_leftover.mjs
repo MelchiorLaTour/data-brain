@@ -63,7 +63,7 @@ try {
   if (scenario === 'fast') await fs.writeFile(path.join(docs, 'plan.md'), '# Plan\ng39notesmarker ordinary note, edited once.\n');   // a few changed files -> fast refresh
 
   // 0.1.42: a brain with no recorded privacy-rules version now gets a FULL re-check at start. This scenario is about the fast refresh, so give the brain the version a 0.1.38+ brain has.
-  if (scenario === 'fast') await fs.writeFile(statePath, JSON.stringify({ ...JSON.parse(await fs.readFile(statePath, 'utf8')), privacyRulesVersion: '0.1.38' }));
+  if (scenario === 'fast') await fs.writeFile(statePath, JSON.stringify({ ...JSON.parse(await fs.readFile(statePath, 'utf8')), privacyRulesVersion: '0.2.1-part40' }));
   server = run(newPath); await initialize(server);
   const before = await healthLine(server);
   console.log(`[${scenario}] verify_install, first call on the upgraded brain: ${before}`);

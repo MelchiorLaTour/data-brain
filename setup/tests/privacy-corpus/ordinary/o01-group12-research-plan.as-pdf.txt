@@ -1,0 +1,8 @@
+Group 12 – Research Plan
+Course code: FIN2034 – Empirical Finance
+Members: Alice Martin (alice.martin@example.edu), Bruno Lefevre (bruno.lefevre@example.edu)
+Student IDs: s20231045, s20231187
+Code: Python, with pandas and statsmodels for the regressions.
+First pass: read the five core papers and summarise each in one paragraph.
+Second pass: replicate table 3 of the main paper.
+Deadline: 12/03, presentation in room B204.

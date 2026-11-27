@@ -49,7 +49,7 @@ const treeOf = async dir => {
 };
 const blockFor = home => {
   const dest = `${home}/Library/Application Support/DataBrain/app/0.2.1`;
-  return `[mcp_servers.databrain]\ncommand = "${dest}/node/bin/node"\nargs = ["${dest}/setup/mcp/server.mjs", "--databrain-client", "chatgpt"]\nstartup_timeout_sec = 30\ntool_timeout_sec = 1200\n`;
+  return `[mcp_servers.databrain]\ncommand = "${dest}/node/bin/node"\nargs = ["${dest}/setup/mcp/server.mjs", "--databrain-client", "chatgpt", "--databrain-desktop-only"]\nenv_vars = ["CODEX_INTERNAL_ORIGINATOR_OVERRIDE"]\nstartup_timeout_sec = 30\ntool_timeout_sec = 1200\n`;
 };
 const appRootOf = home => path.join(home, 'Library/Application Support/DataBrain/app');
 const noBackups = async home => (await fs.readdir(path.join(home, '.codex')).catch(() => [])).filter(name => name.includes('backup'));
@@ -77,7 +77,8 @@ try {
   const command = config.match(/^command = "(.*)"$/m)[1];
   const args = JSON.parse(config.match(/^args = (\[.*\])$/m)[1]);
   assert.equal(command, path.join(dest, 'node/bin/node'));
-  const server = startChatgpt({ home: fresh.home, script: args[0], node: command, extraArgs: args.slice(1) });
+  // Part 41: the ChatGPT app's app-server sets CODEX_INTERNAL_ORIGINATOR_OVERRIDE and env_vars forwards it; without it (Codex in Terminal) the server stands down.
+  const server = startChatgpt({ home: fresh.home, script: args[0], node: command, extraArgs: args.slice(1), env: { CODEX_INTERNAL_ORIGINATOR_OVERRIDE: 'Codex Desktop' } });
   try {
     const init = await server.initialize({ elicitation: { form: {} } });
     assert.equal(init.serverInfo.name, 'databrain');
@@ -119,12 +120,17 @@ try {
   // 5. an older entry of ours (another version folder, more keys, a table and comments after it) is replaced; everything else stays
   const upgrade = await fakeHome('installer-upgrade');
   const oldDest = `${upgrade.home}/Library/Application Support/DataBrain/app/0.2.0`;
-  const before = '# top\n\n[mcp_servers.databrain]\ncommand = "' + oldDest + '/node/bin/node"\nargs = ["' + oldDest + '/setup/mcp/server.mjs"]\nenabled = false\n[mcp_servers.databrain.env]\nFOO = "1"\n\n# the other server\n[mcp_servers.zorblat]\ncommand = "/bin/echo"\n';
+  const OLD_RULE = '# >>> databrain-managed: developer_instructions (written by the DataBrain installer; remove this block to undo) >>>\ndeveloper_instructions = """If DataBrain reports private files, reply only: old wording."""\n# <<< databrain-managed <<<\n';
+  const before = '# top\n\n' + OLD_RULE + '\n[mcp_servers.databrain]\ncommand = "' + oldDest + '/node/bin/node"\nargs = ["' + oldDest + '/setup/mcp/server.mjs"]\nenabled = false\n[mcp_servers.databrain.env]\nFOO = "1"\n\n# the other server\n[mcp_servers.zorblat]\ncommand = "/bin/echo"\n';
   await fs.mkdir(path.join(upgrade.home, '.codex'));
   await fs.writeFile(path.join(upgrade.home, '.codex/config.toml'), before);
   const upgraded = run(top, upgrade.home);
   assert.equal(upgraded.status, 0, upgraded.stdout + upgraded.stderr);
   assert.equal(readConfig(upgrade.home), `# top\n\n${blockFor(upgrade.home)}\n# the other server\n[mcp_servers.zorblat]\ncommand = "/bin/echo"\n`, 'only the databrain entry changed');
+  const upgradedRaw = readRawConfig(upgrade.home);
+  assert.equal((upgradedRaw.match(/# >>> databrain-managed: developer_instructions/g) || []).length, 1, 'part 41: a re-install replaces the old rule block, no duplicate');
+  assert(!/old wording/.test(upgradedRaw) && /These rules apply only when this session has DataBrain tools/.test(upgradedRaw), 'part 41: the old rule text is replaced by the scoped text');
+  assert.equal((await noBackups(upgrade.home)).length, 1, 'part 41: the replaced file is backed up once');
 
   // 5b. servers an earlier install left running are stopped; an index worker, another app's server and a stranger are not
   {

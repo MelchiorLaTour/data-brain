@@ -1,0 +1,6 @@
+Projet de groupe – plan de recherche
+Code : R et Python pour le nettoyage des données.
+Premier pass : relire les sources avant la soutenance.
+Membres : lea.dupont@example.fr (matricule e21904577), hugo.bernard@example.fr (matricule e21904612)
+Code du cours : FIN2034
+Soutenance le 14/05 en salle A110.
