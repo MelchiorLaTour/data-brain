@@ -177,6 +177,13 @@ Claude Desktop: install, setup on real folders, search, note capture and the hea
 tested yet: a reboot after install and iCloud moving Desktop & Documents. See
 [setup/README.md](setup/README.md) for package and test status.
 
+First clone the repository and go into this folder:
+
+```
+git clone https://github.com/MelchiorLaTour/data-brain.git
+cd "data-brain/Terminal version (recommended)"
+```
+
 The established terminal installation is two layers:
 
 1. **`./install.sh`** [no LLM needed] — checks dependencies (ripgrep, sqlite3), walks you

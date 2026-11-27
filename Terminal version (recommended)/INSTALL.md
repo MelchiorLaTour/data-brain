@@ -22,6 +22,13 @@ Prerequisites: bash, `rg` (ripgrep), `sqlite3` (install.sh checks and tells you 
 
 ## Step 0 — run the installer  [no LLM needed]
 
+First clone the repository and go into this folder:
+
+```
+git clone https://github.com/MelchiorLaTour/data-brain.git
+cd "data-brain/Terminal version (recommended)"
+```
+
 ```
 ./install.sh
 ```
