@@ -1,0 +1,6 @@
+Jane Roe – Curriculum Vitae
+jane.roe@example.com | +33 6 12 34 56 78 | linkedin.com/in/jane-roe-4b2a91
+Education: MSc in Finance, 2023-2025
+Experience: Analyst intern, Example Capital, summer 2024
+Skills: Python, SQL, Excel, Bloomberg
+Languages: English, French, Spanish

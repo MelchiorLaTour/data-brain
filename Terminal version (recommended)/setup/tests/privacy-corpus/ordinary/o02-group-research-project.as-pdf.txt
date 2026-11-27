@@ -1,0 +1,7 @@
+Group Research Project – Final Outline
+Team: carol.nguyen@example.edu, dan.osei@example.edu, erin.walsh@example.edu
+Research question: do ESG ratings predict bond spreads after 2020?
+Data: Refinitiv extract, 1,240 issuers, 2015-2023.
+Code: R and Python; the notebooks live in the shared drive folder.
+Pass: the draft goes to the tutor on Friday for a first read.
+We cleaned the covid19 sample together in week 4.

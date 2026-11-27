@@ -1,0 +1,4 @@
+Group chat export
+[10:02] alice.martin@example.edu: we cleaned the covid19 dataset together yesterday
+[10:03] bruno.lefevre@example.edu: great, I upgraded everyone to python3 and pandas2 for the notebook
+[10:05] alice.martin@example.edu: meeting in room B204 at noon

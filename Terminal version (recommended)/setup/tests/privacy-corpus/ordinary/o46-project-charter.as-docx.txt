@@ -1,0 +1,5 @@
+Project charter – Campus app
+Sponsor: student union
+Scope: events calendar and room booking
+Login: through the school account, no new password to create.
+Milestone 1: prototype by 15/11
