@@ -1,10 +1,12 @@
 # DataBrain for the ChatGPT app (Mac) (test)
 
+## [Install guide (PDF): DataBrain-ChatGPT-install-guide.pdf](DataBrain-ChatGPT-install-guide.pdf)
+
 ## [Click here to download DataBrain-ChatGPT-Installer-0.2.1.zip](https://github.com/MelchiorLaTour/data-brain/raw/main/ChatGPT%20app%20%28Mac%29/DataBrain-ChatGPT-Installer-0.2.1.zip)
 
 **Test build.** Not released yet: still being tested in the ChatGPT app. Do not use it unless you were asked to test it.
 
-It downloads straight to your Downloads folder. Then follow the install steps you were sent, or open the [guide](databrain-chatgpt-guide.html).
+It downloads straight to your Downloads folder. Then follow the install steps you were sent, or the install guide linked above.
 
 Clicking the file name in the list above only opens a GitHub preview page. Use the link in this heading instead.
 

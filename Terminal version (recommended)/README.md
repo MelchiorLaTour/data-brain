@@ -1,5 +1,28 @@
 # DataBrain: Terminal version (recommended)
 
+## Download and install
+
+**Option A, no git:** on the [repository front page](https://github.com/MelchiorLaTour/data-brain), click the green **Code** button, then **Download ZIP**. Open the zip in Downloads to unzip it. Open Terminal and go into this folder:
+
+```
+cd ~/Downloads/data-brain-main/"Terminal version (recommended)"
+```
+
+**Option B, with git:**
+
+```
+git clone https://github.com/MelchiorLaTour/data-brain.git
+cd "data-brain/Terminal version (recommended)"
+```
+
+Then run:
+
+```
+./install.sh
+```
+
+Details are in the [Install](#install) section below and in [INSTALL.md](INSTALL.md).
+
 A personal knowledge index that lets an AI agent
 search, read, and honestly abstain over YOUR notes without moving or editing the originals.
 It stores derived search data, including extracted text, in its own working folder. The

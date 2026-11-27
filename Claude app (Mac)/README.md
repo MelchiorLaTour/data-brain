@@ -1,8 +1,10 @@
 # DataBrain for the Claude app (Mac)
 
+## [Install guide (PDF): DataBrain-install-guide.pdf](DataBrain-install-guide.pdf)
+
 ## [Click here to download databrain.mcpb](https://github.com/MelchiorLaTour/data-brain/releases/latest/download/databrain.mcpb)
 
-It downloads straight to your Downloads folder. Then follow the install guide: [DataBrain-install-guide.pdf](DataBrain-install-guide.pdf)
+It downloads straight to your Downloads folder.
 
 Clicking the file name in the list above only opens a GitHub preview page. Use the link in this heading instead.
 
