@@ -388,7 +388,9 @@ try {
     await fs.writeFile(rootRace.release, 'resume realpath');
     const rootSwapRead = await rootSwapReadPromise;
     const rootSwapText = rootSwapRead.result.content[0].text;
-    assert.match(rootSwapText, /approved source folder changed identity/i, `replacement source root was not rejected: ${rootSwapText}`);
+    // Part 39: with two approved folders, a replaced one pauses only itself; the reply names it and reads nothing from it.
+    assert(rootSwapText.includes(`${path.basename(sourceRoot)} is paused: a different folder now sits at this path`), `replaced source root was not named as paused: ${rootSwapText}`);
+    assert(rootSwapText.includes('Nothing was read from it'), `paused-folder reply did not say nothing was read: ${rootSwapText}`);
     assert(!rootSwapText.includes('REPLACEMENT_ROOT_SECRET'), 'replacement-root content was disclosed');
   } finally {
     await fs.writeFile(rootRace.release, 'resume realpath');
