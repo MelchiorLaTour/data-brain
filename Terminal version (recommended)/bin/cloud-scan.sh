@@ -5,6 +5,7 @@
 #   $MOC/cloud-shortcuts.tsv  path                  (.gdoc/.gsheet/.gslides: links, not documents)
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 MOC="${NB_MOC_DIR:-$ROOT/moc}"
 mkdir -p "$MOC"

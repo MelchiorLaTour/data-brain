@@ -12,6 +12,7 @@
 #              bare 4-digit years); search-acceleration only — full-text rg stays the safety net.
 set -uo pipefail   # NOTE: no `-e` — this is a data-munging loop; empty greps are normal, not fatal.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 MOC="${NB_MOC_DIR:-$ROOT/moc}"
 OUT="$MOC/index.tsv"

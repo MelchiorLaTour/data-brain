@@ -2,6 +2,10 @@
 
 ## Download and install
 
+Pick your computer: **[Mac](#mac)** or **[Windows](#windows)**. Both use the same engine.
+
+### Mac
+
 **Option A, no git:** on the [repository front page](https://github.com/MelchiorLaTour/data-brain), click the green **Code** button, then **Download ZIP**. Open the zip in Downloads to unzip it. Open Terminal and go into this folder:
 
 ```
@@ -23,6 +27,28 @@ Then run:
 
 Details are in the [Install](#install) section below and in [INSTALL.md](INSTALL.md).
 
+### Windows
+
+DataBrain runs on Windows inside **WSL 2** (Windows Subsystem for Linux, the Ubuntu that ships with Windows).
+
+1. Open **PowerShell** and run `wsl --install`, then restart the computer. Open **Ubuntu** from the Start menu.
+2. In Ubuntu, install the tools DataBrain needs:
+
+```
+sudo apt update
+sudo apt install -y git python3 ripgrep sqlite3 jq pandoc poppler-utils
+```
+
+3. Download DataBrain inside Ubuntu (not into a Windows folder) and install it:
+
+```
+git clone https://github.com/MelchiorLaTour/data-brain.git ~/data-brain
+cd ~/data-brain/"Terminal version (recommended)"
+bash windows/install-wsl.sh
+```
+
+Your notes can stay in Windows folders: Ubuntu sees `C:\Users\you\Documents` as `/mnt/c/Users/you/Documents`. Details and current limits are in [windows/README.md](windows/README.md).
+
 A personal knowledge index that lets an AI agent
 search, read, and honestly abstain over YOUR notes without moving or editing the originals.
 It stores derived search data, including extracted text, in its own working folder. The
@@ -30,7 +56,7 @@ terminal engine uses bash and sqlite FTS5 without a model call or network connec
 
 ## Compatibility
 
-The terminal setup targets Claude Code on macOS. A separate Claude Desktop extension is
+The terminal setup targets Claude Code on macOS, and on Windows through WSL 2 ([windows/README.md](windows/README.md)). A separate Claude Desktop extension is
 published as a release; the [acceptance ledger](setup/ACCEPTANCE.md) records what has been tested. Its package,
 setup flow, tests, and current limits are described in
 [setup/README.md](setup/README.md). [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) describes

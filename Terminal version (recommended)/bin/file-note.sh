@@ -12,6 +12,7 @@
 # A genuinely new room is fine — just name it; rebuild will create the room MOC.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 DEST="$VAULT/Ideas"          # the capture pile; theme (not folder) does the organizing
 

@@ -11,6 +11,7 @@
 # "VERIFY byte-identical (cmp) before deleting" — confirmation is the owner's, on the real files.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 OUT="$ROOT/DELETE-CANDIDATES.md"
 TS="$(date '+%Y-%m-%d %H:%M')"

@@ -4,6 +4,7 @@
 # If keywords are omitted, tags: from the file frontmatter are retained.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 MOC="${NB_MOC_DIR:-$ROOT/moc}"
 INDEX="$MOC/index.tsv"

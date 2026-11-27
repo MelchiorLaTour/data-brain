@@ -7,6 +7,7 @@
 # theme line is left as-is. Run AFTER bin/build-index.sh has captured the labels.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 
 stripped=0; scanned=0

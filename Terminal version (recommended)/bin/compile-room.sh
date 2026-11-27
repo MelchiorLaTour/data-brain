@@ -7,6 +7,7 @@
 # Usage:  bin/compile-room.sh <room>
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 INDEX="$ROOT/moc/index.tsv"
 EXDIR="$ROOT/moc/extracted"
 CAP=2000   # per-note body char cap, keeps a big room inside a sane prompt budget

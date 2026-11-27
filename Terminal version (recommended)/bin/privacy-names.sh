@@ -4,6 +4,7 @@
 # (privacy.pl), and records them as `held` in $NB_PRIVACY_FILE for the user to review.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 [ -n "${NB_PRIVACY_FILE:-}" ] || exit 0
 mkdir -p "$(dirname "$NB_PRIVACY_FILE")"

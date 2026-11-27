@@ -16,6 +16,7 @@
 #   env SYNTH_SKIP_FTS=1  skips the fts.db rebuild (batch several saves, then run build-fts.sh once).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 # Override only with another directory inside a selected source root.
 DEST_DIR="${SYNTH_DEST:-$VAULT/brain-syntheses}"

@@ -6,6 +6,7 @@
 # Verdicts: IDENTICAL-LOCAL (safe to delete the copy) | DIFFER | OFFLOADED | MISSING.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 
 # readable_local: true only if the file's bytes are actually on disk (not an iCloud dataless stub).

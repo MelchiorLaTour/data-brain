@@ -4,6 +4,7 @@
 # Usage:  bin/recent.sh [N]   (default 20)
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 INDEX="$ROOT/moc/index.tsv"
 N="${1:-20}"
 [ -s "$INDEX" ] || { echo "error: $INDEX missing/empty" >&2; exit 1; }

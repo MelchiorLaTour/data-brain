@@ -24,6 +24,7 @@
 #                                                 # the other rows are not even looked at, and their report lines are kept as they are
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 MOC="${NB_MOC_DIR:-$ROOT/moc}"
 INDEX="$MOC/index.tsv"

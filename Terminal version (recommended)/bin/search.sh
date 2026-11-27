@@ -5,6 +5,7 @@
 # duplicated. Plain text in, plain matches out.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 # Canonical pile roots come from the shared list (bin/canon.sh) so search + rebuild agree.
 source "$ROOT/bin/canon.sh"
 # Claude Code's per-$HOME memory dir (dir name = $HOME with '/' -> '-'); derived, never hardcoded.

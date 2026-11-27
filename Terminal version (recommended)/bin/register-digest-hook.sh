@@ -7,6 +7,9 @@ set -euo pipefail
 SETTINGS="$HOME/.claude/settings.json"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOKCMD="bash $ROOT/bin/brain-digest.sh"
+# Windows WSL 2 can take ~6s to boot on a cold start, so the hook needs longer there.
+TIMEOUT=5
+grep -qi microsoft /proc/version 2>/dev/null && TIMEOUT=30
 
 [ -f "$SETTINGS" ] || { echo "no settings.json at $SETTINGS" >&2; exit 1; }
 command -v jq >/dev/null || { echo "jq not found" >&2; exit 1; }
@@ -18,8 +21,8 @@ fi
 
 cp "$SETTINGS" "$SETTINGS.bak-graft3"
 tmp="$(mktemp)"
-jq --arg cmd "$HOOKCMD" \
-  '.hooks.SessionStart += [{"matcher":"startup|clear|compact","hooks":[{"type":"command","command":$cmd,"timeout":5}]}]' \
+jq --arg cmd "$HOOKCMD" --argjson timeout "$TIMEOUT" \
+  '.hooks.SessionStart += [{"matcher":"startup|clear|compact","hooks":[{"type":"command","command":$cmd,"timeout":$timeout}]}]' \
   "$SETTINGS" > "$tmp"
 
 # sanity: valid JSON + the hook is actually present, else keep the original untouched

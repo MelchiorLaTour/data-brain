@@ -7,6 +7,7 @@
 # as canon.sh. Pure bash, Claude-OFF, reads nothing but the index.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 INDEX="${NB_INDEX:-$ROOT/moc/index.tsv}"
 room="${1:?usage: room-stamp.sh <room>}"
 [ -s "$INDEX" ] || { echo "error: $INDEX missing/empty" >&2; exit 1; }

@@ -14,6 +14,7 @@
 #        LOOK_CAP=N look.sh "..."                  (per-hit snippet char cap; default 1200)
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 source "$ROOT/bin/canon.sh"
 FTS="$ROOT/bin/fts.sh"
 EXDIR="${NB_EXTRACTED_DIR:-${NB_MOC_DIR:-$ROOT/moc}/extracted}"

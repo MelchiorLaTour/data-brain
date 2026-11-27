@@ -26,6 +26,7 @@
 # sqlite3's CSV importer, which parses quoted fields with embedded newlines in one pass.
 set -uo pipefail   # no -e: a data-munging loop; a missing file / empty read is normal, not fatal.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[ ! -f "$ROOT/bin/compat.sh" ] || source "$ROOT/bin/compat.sh"   # Linux / Windows WSL: BSD stat/date forms
 # Shared artifact ignore list (M4): canon.sh defines ARTIFACTS + is_artifact(), the ONE exclusion
 # mechanism all three consumers honor — no more per-script hardcoded basename lists.
 source "$ROOT/bin/canon.sh"

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# WSL-only launcher. The macOS implementation under bin/ remains unchanged.
+# WSL launcher. bin/ scripts handle Linux themselves (bin/compat.sh); this is a convenience entry point.
 set -eu
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SHIMS="$ROOT/windows/shims"
 
 usage() {
   echo "usage: bash windows/data-brain-wsl.sh {install|verify|fts|look|search|refresh|recent|extract|rebuild} [arguments]" >&2
@@ -12,7 +11,6 @@ usage() {
 [ "$#" -gt 0 ] || usage
 command="$1"
 shift
-export PATH="$SHIMS:$PATH"
 
 case "$command" in
   install) exec bash "$ROOT/windows/install-wsl.sh" "$@" ;;
