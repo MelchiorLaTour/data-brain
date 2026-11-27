@@ -1035,17 +1035,40 @@ function reapprovedRootIdentity(root, prior) {
   return prior ? (renumberedIdentity(prior) || prior) : captureRootIdentities([root])[0];
 }
 
+// Part 39: the Applications folder is read for app names only, and a macOS update can put a new folder at that path (new inode). When the
+// folder there is a real folder, not a link, at the same real path and owned by the system, its new identity is recorded by itself.
+// User folders never qualify: a replaced Desktop, Documents, Downloads, iCloud Drive or added folder stays refused until the user approves it.
+function systemFolderIdentity(prior) {
+  if (codexMode || !appReaders || !prior || typeof prior.path !== 'string' || !Number.isInteger(prior.dev) || !Number.isInteger(prior.ino)) return null;
+  try {
+    if (!appReaders.isApplicationsRoot(prior.path)) return null;
+    const info = lstatSync(prior.path);
+    if (!isSystemFolder(prior.path, info) || (info.ino === prior.ino && info.dev === prior.dev)) return null;
+    return { path: prior.path, dev: info.dev, ino: info.ino };
+  } catch { return null; }
+}
+// The one "is this a system folder" check: a plain folder (not a link), at its own real path, owned by root. Ownership cannot be faked in a
+// test without sudo, so a test names the expected owner (DATABRAIN_TEST_SYSTEM_FOLDER_UID; ignored on a real home folder).
+function isSystemFolder(folder, info) {
+  const owner = Number(testHook('DATABRAIN_TEST_SYSTEM_FOLDER_UID') ?? 0);
+  return info.isDirectory() && !info.isSymbolicLink() && realpathSync(folder) === folder && info.uid === owner;
+}
+
 // Upgrade path for a brain stuck on 0.1.45 (stale st_dev saved): refresh the saved records and the identity grant file, no user action.
+// The Codex route returns at once: it is the frozen, separate Codex branch (never released), not the ChatGPT host (chatgptMode), which heals.
 async function healRenumberedRootIdentities(force = false) {
   if (!statePath || codexMode || (!force && process.env.DATABRAIN_TEST_NO_RENUMBER_HEAL === '1')) return;   // the hook lets a test reach the re-approval paths on their own; repair (force) ignores it
-  const stale = state => Array.isArray(state.rootIdentities) && state.rootIdentities.some(entry => renumberedIdentity(entry));
+  const refreshed = entry => renumberedIdentity(entry) || systemFolderIdentity(entry);
+  const stale = state => Array.isArray(state.rootIdentities) && state.rootIdentities.some(entry => refreshed(entry));
   if (!stale(await readState().catch(() => ({})))) return;
   await withDataBrainMutationLock({ message: 'Refreshing a folder record after the disk number changed.' }, async () => {
     const latest = await readState();
     if (!stale(latest)) return;
-    const rootIdentities = latest.rootIdentities.map(entry => renumberedIdentity(entry) || entry);
+    const system = latest.rootIdentities.filter(entry => !renumberedIdentity(entry) && systemFolderIdentity(entry)).map(entry => entry.path);
+    const rootIdentities = latest.rootIdentities.map(entry => refreshed(entry) || entry);
     await writeRootIdentities(rootIdentities);
     await writeState({ ...latest, rootIdentities, updatedAt: new Date().toISOString() });
+    for (const folder of system) logStage({ kind: 'folder check' }, `root-identity-refreshed ${folder}`, Date.now());
   }).catch(() => {});   // a running job holds the lock: the next call or maintenance pass tries again
 }
 
@@ -1062,8 +1085,35 @@ function storedRootIdentity(state, root) {
   return identity;
 }
 
+// Part 39: an approved folder whose identity changed (replaced, gone, a link, unreadable) is paused on its own; the other folders keep
+// working. Only when every folder is paused does the old refusal stand. The frozen Codex route keeps its all-or-nothing rule.
+function pausedRootEntries(state) {
+  if (codexMode || !Array.isArray(state?.roots) || !Array.isArray(state.rootIdentities)) return [];
+  const paused = [];
+  for (const root of state.roots) {
+    const identity = state.rootIdentities.find(entry => entry?.path === root);
+    if (!identity || !Number.isInteger(identity.dev) || !Number.isInteger(identity.ino)) continue;   // a missing record is a setup problem: storedRootIdentity says so
+    const condition = rootCondition(identity);
+    if (condition !== 'ok') paused.push({ root, condition });
+  }
+  return paused;
+}
+function pausedRootPaths(state) { return pausedRootEntries(state).map(entry => entry.root); }
+// Grant files written from the working (unpaused) list keep a paused folder: it is still approved, only not read.
+function withPausedRoots(roots, state) {
+  const paused = pausedRootPaths(state).filter(root => !roots.includes(root));
+  return paused.length ? [...roots, ...paused] : roots;
+}
+function pausedFoldersNote(state) {
+  return pausedRootEntries(state).map(({ root, condition }) =>
+    `Paused folder: ${displayPath(root)}: ${ROOT_CONDITION_FACT[condition] || condition}. DataBrain stopped reading only this folder; the other folders keep working. If the folder was changed on purpose, DataBrain repair can approve it again.\n`).join('');
+}
+
 function assertStoredRootIdentities(state, roots = state.roots || []) {
-  for (const root of roots) storedRootIdentity(state, root);
+  const paused = new Set(pausedRootPaths(state));
+  const checked = roots.filter(root => !paused.has(root));
+  for (const root of checked) storedRootIdentity(state, root);
+  if (roots.length && !checked.length) storedRootIdentity(state, roots[0]);   // every folder is paused: the refusal as before
 }
 
 function assertOpenedSource(handleInfo, expected) {
@@ -1161,11 +1211,13 @@ async function screenAppContent() {
   for (const file of files) if (!kept.has(file)) await fs.unlink(file).catch(() => {});
 }
 
-async function approvedRoots(state) {
+async function approvedRoots(state, includePaused = false) {
   if (!Array.isArray(state.roots) || state.roots.length === 0) throw new Error('No source folders have been selected for indexing yet.');
   assertStoredRootIdentities(state);
+  const paused = new Set(pausedRootPaths(state));
   const roots = [];
   for (const selected of state.roots) {
+    if (paused.has(selected)) { if (includePaused) roots.push(selected); continue; }   // Part 39: approved, not read
     const root = validateSelectedFolder(selected);
     const canonical = realpathSync(root);
     if (canonical !== root) throw new Error('A selected source folder changed identity: the path now leads somewhere else.');
@@ -2727,10 +2779,12 @@ async function beginSourceSelection(add = false, confirmed = false, folders = un
     const job = startJob('source grant reconciliation', current => withDataBrainMutationLock(current, async () => {
       const latest = await readState();
       if (latest.stage === 'indexing') throw new Error('Wait for the current indexing job to finish before changing source access.');
-      const priorRoots = add ? await validateStoredRoots(latest) : [];
+      const priorRoots = add ? await validateStoredRoots(latest, { includePaused: true }) : [];   // Part 39: adding a folder keeps a paused one approved
       const selectedRoots = validateConfiguredRoots();
       const roots = [...new Set([...priorRoots, ...selectedRoots])];
+      const pausedNow = new Set(pausedRootPaths(latest));
       for (const root of roots) {
+        if (pausedNow.has(root) && priorRoots.includes(root)) continue;
         if (realpathSync(root) !== root) throw new Error('A source folder resolves through a symbolic link. Select the real folder in Claude Desktop settings.');
         if (overlapsDataHome(root)) throw new Error('A selected folder cannot contain DataBrain or sit inside it. Choose the actual document folders.');
       }
@@ -2748,7 +2802,8 @@ async function beginSourceSelection(add = false, confirmed = false, folders = un
     }));
     return `Applying Claude Desktop source-folder settings. Reconciliation job: ${job.id}.`;
   }
-  const priorRoots = add ? await validateStoredRoots(state) : [];
+  const priorRoots = add ? await validateStoredRoots(state, { includePaused: true }) : [];
+  const pausedNow = new Set(pausedRootPaths(state));
   if (!process.env.DATABRAIN_TEST_SELECTION_FILE) throw new Error('DataBrain did not receive a folder list. Folders are added in Claude Desktop extension settings (Add directory); no restart is needed after saving.');
   const job = startJob('source folder selection', async current => {
     current.message = `Waiting for the user to choose ${add ? 'additional' : 'approved'} source folders.`;
@@ -2758,6 +2813,7 @@ async function beginSourceSelection(add = false, confirmed = false, folders = un
     if (selected.paths.length < 1) throw new Error('Select at least one source folder.');
     const roots = [...new Set([...priorRoots, ...selected.paths.map(validateSelectedFolder)])];
     for (const root of roots) {
+      if (pausedNow.has(root) && priorRoots.includes(root)) continue;
       if (realpathSync(root) !== root) throw new Error('A source folder resolves through a symbolic link. Select the real folder.');
       if (overlapsDataHome(root)) throw new Error('A selected folder cannot contain DataBrain or sit inside it. Choose the actual document folders.');
     }
@@ -3167,7 +3223,7 @@ async function dropApplicationsFileRows(roots, current) {
   if (codexMode) return;
   let index;
   try { index = await fs.readFile(path.join(mocDir, 'index.tsv'), 'utf8'); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
-  if (applicationsFileRows(index, roots).length) await pruneRevokedRecords(roots, current);
+  if (applicationsFileRows(index, roots).length) await pruneRevokedRecords(withPausedRoots(roots, await readState()), current);   // Part 39: a paused folder's rows stay
 }
 
 async function pruneRevokedRecords(roots, current) {
@@ -4004,8 +4060,8 @@ async function buildRelationships(job) {
   return `Relationship report saved for ${records.length} indexed rows. Explicit local Markdown links: ${summary.links}; exact duplicate groups: ${summary.duplicateGroups}; same-title groups for human review: ${summary.titleConflicts}; unavailable or unsafe sources: ${summary.unavailable}. Shared keywords were not treated as proof. Canonical files were not changed.`;
 }
 
-async function validateStoredRoots(state) {
-  const roots = await approvedRoots(state);
+async function validateStoredRoots(state, { includePaused = false } = {}) {
+  const roots = await approvedRoots(state, true);   // the grant files list every approved folder, paused ones too
   assertSafeDataHome();
   const grantInfo = requireStat(rootsPath);
   const canonicalGrant = path.join(realpathSync(dataHome), path.relative(dataHome, rootsPath));
@@ -4029,7 +4085,9 @@ async function validateStoredRoots(state) {
       roots.some(root => !identityGrant.includes(expectedIdentityGrant.find(line => line.startsWith(`${root}\t`))))) {
     throw new Error('The selected-folder identity grant does not match setup state.');
   }
-  return roots;
+  if (includePaused) return roots;
+  const paused = new Set(pausedRootPaths(state));
+  return roots.filter(root => !paused.has(root));
 }
 
 function engineEnv() {
@@ -4979,7 +5037,7 @@ async function exportAppContentLocked(userRoots, current) {
   let stage = Date.now();
   const lap = (name, note = '') => { logStage(current, name, stage, note); stage = Date.now(); };
   await fs.mkdir(appContentRoot(), { recursive: true, mode: 0o700 });
-  await writeRootGrant(userRoots);
+  await writeRootGrant(withPausedRoots(userRoots, await readState()));   // Part 39: a paused folder stays in the grant
   await writeRootIdentities((await readState()).rootIdentities || []);
   lap('app-read:grant');
   const before = await snapshotAppContent();
@@ -5017,12 +5075,13 @@ async function performIndexingContents(roots, refresh, current, commitState) {
   const selectedRoots = roots;
   if (!codexMode) {
     const userRoots = roots.filter(root => root !== appContentRoot());
+    const pausedState = await readState();
     if (appsWanted(userRoots)) {
       await exportAppContentNow(userRoots, current);
       roots = withAppContentRoot(userRoots);
-    } else if (appContentActive()) {
+    } else if (appContentActive() && !appsWanted(pausedRootPaths(pausedState))) {   // Part 39: a paused Applications folder keeps the app content
       await removeAppContent();
-      await writeRootGrant(userRoots);
+      await writeRootGrant(withPausedRoots(userRoots, pausedState));
       await writeRootIdentities((await readState()).rootIdentities || []);
       roots = userRoots;
     }
@@ -5762,6 +5821,7 @@ async function healthReport() {
   const state = await readState();
   if (!state.stage || state.stage === 'not configured') return 'DataBrain setup has not started.';
   const roots = await validateStoredRoots(state);
+  const pausedRoots = pausedRootPaths(state);   // Part 39: rows of a paused folder are neither out of scope nor checked
   assertSafeDataHome();
   const indexPath = path.join(mocDir, 'index.tsv');
   const indexInfo = requireStat(indexPath);
@@ -5773,6 +5833,7 @@ async function healthReport() {
   for (const line of rows) {
     const stored = line.split('\t', 1)[0];
     const candidate = path.resolve(decodeIndexPath(stored));
+    if (pausedRoots.some(root => inside(candidate, root))) continue;
     if (!roots.some(root => inside(candidate, root))) { outOfScope += 1; continue; }
     try {
       const info = lstatSync(candidate);
@@ -5845,6 +5906,7 @@ async function healthReport() {
   const ftsMismatch = ftsHealthy && ftsSourceFiles !== rows.length;
   return [
     `Stage: ${state.stage}.`,
+    ...pausedFoldersNote(state).split('\n').filter(Boolean),
     `Index records: ${rows.length}; missing ${missing}; unsafe ${unsafe}; outside approved roots ${outOfScope}.`,
     `File inventory: ${inventorySummary}.`,
     `Source freshness: ${freshnessSummary}.`,
@@ -6123,6 +6185,8 @@ function decodeIndexPath(value) {
 async function indexedPath(input, state) {
   const roots = await validateStoredRoots(state);
   const requested = path.resolve(input);
+  const paused = pausedRootEntries(state).find(entry => inside(requested, entry.root));   // Part 39b: name the paused folder, read nothing
+  if (paused) throw new Error(`${displayPath(paused.root)} is paused: ${ROOT_CONDITION_FACT[paused.condition] || paused.condition}. Nothing was read from it; the other folders keep working.`);
   if (!recentSearchPaths.has(requested)) throw new Error('Search this source first and read only one of the returned hits.');
   const index = await fs.readFile(path.join(mocDir, 'index.tsv'), 'utf8');
   const present = index.split('\n').some(line => line && !line.startsWith('#') && decodeIndexPath(line.split('\t', 1)[0]) === requested);
@@ -6880,7 +6944,7 @@ async function callToolInner(name, args) {
       case 'databrain_privacy_list': if (!chatgptMode) return { error: { code: -32601, message: `Unknown tool: ${name}` } }; return resultText(await privacyTool({ action: 'list' }));
       case 'databrain_cloud_check': return resultText(await cloudCheckText());
       case 'databrain_cloud_fetch': return resultText(await beginCloudFetch(args));
-      case 'databrain_setup_status': { await resumeAutomaticFinish(); const freshness = await freshnessNoteOnUse(statusWaitMs()); return resultText(`${otherDatabrainNotice(true)}${freshnessFirst(freshness)}${await setupUnfinishedBanner()}${await statusText()}${await repairHint()}`); }
+      case 'databrain_setup_status': { await resumeAutomaticFinish(); const freshness = await freshnessNoteOnUse(statusWaitMs()); return resultText(`${otherDatabrainNotice(true)}${freshnessFirst(freshness)}${await setupUnfinishedBanner()}${pausedFoldersNote(await readState().catch(() => ({})))}${await statusText()}${await repairHint()}`); }
       case 'databrain_health': return resultText(await healthReport());
       case 'databrain_verify_install': return resultText(await verifyInstall());
       case 'databrain_note_folder': return resultText(await noteFolderTool(args));
@@ -6938,7 +7002,8 @@ async function callToolInner(name, args) {
         const recheck = await privacyRecheckGate(); if (recheck) return resultText(recheck);
         const freshness = await freshnessNoteOnUse();   // changes are added first, then the answer
         const [found, banner] = await Promise.all([search(args.query, limit, { collapse: true, paged: true, offset: args.offset ?? 0 }), setupUnfinishedBanner()]);
-        return resultText(`${otherDatabrainNotice()}${freshnessFirst(freshness)}${banner}${found}`);
+        const paused = pausedFoldersNote(await readState().catch(() => ({})));   // Part 39: a paused folder is named, the rest answers
+        return resultText(`${otherDatabrainNotice()}${freshnessFirst(freshness)}${banner}${paused}${found}`);
       }
       case 'databrain_abstain_check': {
         const recheck = await privacyRecheckGate(); if (recheck) return resultText(recheck);
