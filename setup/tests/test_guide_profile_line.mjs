@@ -70,7 +70,9 @@ await fs.writeFile(path.join(docs, 'payslip-march.md'), 'private by its name\n')
 await fs.writeFile(path.join(docs, 'scan0042.md'), '# Refund account\npay to FR7630006000011234567890189 please\n');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let n = 0;
-const child = spawn(process.execPath, [path.join(here, '../mcp/server.mjs'), '--databrain-source-roots', docs], { env: { ...process.env, HOME: home }, stdio: ['pipe', 'pipe', 'pipe'] });
+// ChatGPT host: the folder is named in the chat instead of the settings list (server.mjs lines 1948-1960).
+const chatgpt = process.env.DATABRAIN_TEST_CLIENT === 'chatgpt';
+const child = spawn(process.execPath, [path.join(here, '../mcp/server.mjs'), ...(chatgpt ? ['--databrain-client', 'chatgpt'] : ['--databrain-source-roots', docs])], { env: { ...process.env, HOME: home }, stdio: ['pipe', 'pipe', 'pipe'] });
 const waiting = new Map();
 readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
 const ask = (method, params) => new Promise(resolve => { const id = ++n; waiting.set(id, resolve); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });
@@ -79,7 +81,7 @@ try {
   await ask('initialize', { protocolVersion: '2025-03-26' }); child.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
   const early = await tool('databrain_setup_status');
   assert(!/profile instructions|Instructions for Claude/.test(early), 'before setup finishes the status does not mention the line');
-  await tool('databrain_setup_start');
+  if (chatgpt) { await tool('databrain_setup_start', { folders: [docs] }); await tool('databrain_setup_start', { folders: [docs], confirmed: true }); } else await tool('databrain_setup_start');
   let status = '';
   for (const t0 = Date.now(); ; await sleep(400)) {
     status = await tool('databrain_setup_status');
@@ -87,7 +89,7 @@ try {
     if (/held back|looks private|privacy/i.test(status)) await tool('databrain_privacy', { action: 'decide', keep: [] });   // the held files stay held
     assert(Date.now() - t0 < 120000, 'setup reaches ready');
   }
-  assert(status.includes("DataBrain is ready. DataBrain answers best when Instructions for Claude (Claude → Settings… → Account) include the DataBrain line from the guide."), `status says it as a plain fact once setup is finished, with the box's real name:\n${status.slice(0, 400)}`);
+  assert(chatgpt ? (status.startsWith('Stage: ready.') || status.includes('DataBrain is ready.')) && !/Custom Instructions|Instructions for Claude|answers best when|line from the guide/i.test(status.slice(0, 600)) : status.includes("DataBrain is ready. DataBrain answers best when Instructions for Claude (Claude → Settings… → Account) include the DataBrain line from the guide."), `status says it as a plain fact once setup is finished, with the box's real name:\n${status.slice(0, 400)}`);
   assert(!/profile instructions/.test(status), 'the status no longer says "profile instructions"');
   const question = /To check it works, open a new chat and ask: what's in my ([^?\n]+)\?/.exec(status);
   assert(question, `the ready message ends with a test question built from a note title:\n${status.slice(0, 500)}`);

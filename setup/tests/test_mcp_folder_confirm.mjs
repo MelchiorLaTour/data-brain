@@ -25,10 +25,13 @@ const applications = path.join(temp, 'Applications'); await fs.mkdir(application
 await fs.writeFile(path.join(documents, 'plan.md'), '# Plan\nconfirmwindowmarker is in this note.\n');
 const roots = [desktop, documents, downloads, realApplications, other];
 const dataHome = path.join(home, 'DataBrain');
+// ChatGPT host: there is no settings list; the folders are named in the chat and passed as `folders` (server.mjs lines 1948-1960, 1825-1827).
+const chatgpt = process.env.DATABRAIN_TEST_CLIENT === 'chatgpt';
+const named = chatgpt ? { folders: roots } : {};
 const exists = p => fs.access(p).then(() => true, () => false);
 
 async function session(env, run) {
-  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', ...roots], { env: { ...process.env, HOME: home, DATABRAIN_TEST_APP_DIRS: realApplications, DATABRAIN_TEST_CONSENT: 'ask', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [serverScript, ...(chatgpt ? ['--databrain-client', 'chatgpt'] : ['--databrain-source-roots', ...roots])], { env: { ...process.env, HOME: home, DATABRAIN_TEST_APP_DIRS: realApplications, DATABRAIN_TEST_CONSENT: 'ask', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map();
   readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
   let n = 0;
@@ -41,19 +44,19 @@ async function session(env, run) {
 try {
   await session({}, async tool => {
     // confirmed true before any list was shown: the list is shown, nothing happens
-    const early = await tool('databrain_setup_start', { confirmed: true });
+    const early = await tool('databrain_setup_start', { ...named, confirmed: true });
     assert(/Nothing has been read or changed yet/.test(early), `early yes only shows the list: ${early}`);
     assert.equal(await exists(dataHome), false, 'no DataBrain folder after an early confirmed call');
-    const reply = await tool('databrain_setup_start');
-    for (const line of ['- Desktop', '- Documents', '- Downloads', '- Applications (your apps, like Notes)', `- ${other}`]) assert(reply.includes(line), `the list has "${line}": ${reply}`);
-    assert(reply.includes('These come from your DataBrain settings. Some may be left over from an earlier install. Check each one before you say yes.'), `the exact warning line: ${reply}`);
+    const reply = await tool('databrain_setup_start', named);
+    for (const line of ['- Desktop', '- Documents', '- Downloads', '- Applications (your apps, like Notes)', `- ${other.replace(home, '~')}`]) assert(reply.includes(line), `the list has "${line}": ${reply}`);
+    assert(reply.includes(chatgpt ? 'These are the folders named in this chat. Check each one before you say yes.' : 'These come from your DataBrain settings. Some may be left over from an earlier install. Check each one before you say yes.'), `the exact warning line: ${reply}`);
     assert(/temporarily downloads any files that are only online in a cloud drive/.test(reply), `the cloud-download statement: ${reply}`);
     assert(/waiting for the user's yes/.test(reply) && /Nothing has been read or changed yet/.test(reply), `says nothing is read until yes: ${reply}`);
     assert.equal(await exists(dataHome), false, 'no DataBrain folder before the yes');
     assert.equal(await exists(path.join(home, 'DataBrain 2')), false, 'no second folder either');
     assert(!/Stage: (?:indexing|ready)/.test(await tool('databrain_setup_status')), 'nothing is indexing before the yes');
     // yes: setup finishes by itself
-    const started = await tool('databrain_setup_start', { confirmed: true });
+    const started = await tool('databrain_setup_start', { ...named, confirmed: true });
     assert(!/Nothing has been read or changed yet/.test(started), `the yes starts setup: ${started}`);
     await until(async () => {
       const status = await tool('databrain_setup_status');

@@ -230,9 +230,15 @@ JSON.stringify(out);`;
 
 // One row from the app -> an item to write, or null when the item must be skipped (protected, deleted, empty).
 function itemFromRow(row) {
-  if (!row || row.p || row.x || typeof row.b !== 'string') return null;
+  if (!row || row.p || row.x) return null;
   if (row.c && DELETED_CONTAINER.test(String(row.c))) return null;
-  const body = looksLikeHtml(row.b) ? stripHtml(row.b) : row.b.trim();
+  // Part 19: an item with no note comes back from the app as a missing value (null), not as an empty string. Real Mac, 2026-11-16: 305 of 308 reminders
+  // were dropped here, before the title fallback below could run, because only a string body was accepted.
+  const rawBody = typeof row.b === 'string' ? row.b : '';
+  let body = looksLikeHtml(rawBody) ? stripHtml(rawBody) : rawBody.trim();
+  // Part 16: a reminder is very often only a title (no note). The title is its content, so a title-only item is kept with the title as its text;
+  // an item with neither a body nor a title is still skipped.
+  if (!body) body = String(row.t || '').trim();
   if (!body) return null;
   return { id: row.i != null ? String(row.i) : null, container: row.c ? String(row.c) : '', title: String(row.t || '').trim() || 'Untitled', body, date: row.d || null };
 }
@@ -293,14 +299,23 @@ function runInterpreter(script, limitMs = Number(testHook('DATABRAIN_TEST_APP_TI
 const stripHtml = html => decode(html.replace(/<(?:br|\/p|\/div|\/li|\/h\d)\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')).replace(/\n{3,}/g, '\n\n').trim();
 const looksLikeHtml = text => /<\/?(?:div|p|br|span|html|body|h\d|li|ul|ol|b|i)\b/i.test(text);
 
-// ---- apps DataBrain needs are started once, hidden, and then left running ----
-// An app that was not running is started with `open -g -j` and hidden right away, and stays running, so the next check finds it already
-// there and never launches it again. An app the user started is never hidden or quit, and neither is one the user brings forward later.
+// ---- apps DataBrain reads are never started by DataBrain (Part 29) ----
+// Until Part 28 an app that was not running was started with `open -g -j` and hidden. On a real Mac that still showed Notes on the screen in the
+// middle of a chat (the first answer took 13.5 s), and a later check opened it again. It cannot be shown from here that a started app stays hidden
+// and can be quit again (that would mean opening the real apps), so DataBrain does not start any app: a closed app is skipped and read at the next
+// check that finds it open. The start / hide steps below stay as an option (`launch: true`).
+// Part 29b: the one exception is an app that has NEVER been read (first setup, or Applications added later). It is started once, as quietly as macOS
+// allows, read, and quit again if DataBrain started it (an app that was already open stays open). It is never started a second time, whatever happens.
 // Asking whether an app runs uses the system's own process list (no Apple event, so no permission prompt).
 // With a test interpreter set and no DATABRAIN_TEST_APP_LIFECYCLE stub, every app counts as already running and is never launched.
 const runningScript = bundleId => `// running check
 ObjC.import('AppKit');
 JSON.stringify(ObjC.unwrap($.NSRunningApplication.runningApplicationsWithBundleIdentifier(${JSON.stringify(bundleId)})).length > 0);`;
+const quitScript = bundleId => `// quit (only an app DataBrain started for its first read; terminate is a process request, not an Apple event, so it can never start the app)
+ObjC.import('AppKit');
+const apps = ObjC.unwrap($.NSRunningApplication.runningApplicationsWithBundleIdentifier(${JSON.stringify(bundleId)}));
+apps.forEach(a => a.terminate);   // in JXA a method without arguments runs when it is read
+JSON.stringify(apps.length);`;
 const hideScript = bundleId => `// hide
 ObjC.import('AppKit');
 const apps = ObjC.unwrap($.NSRunningApplication.runningApplicationsWithBundleIdentifier(${JSON.stringify(bundleId)}));
@@ -341,34 +356,39 @@ async function lifecycle(action, app) {
   if (stub) return runTool(stub, [action, app.bundleId || '', app.bundlePath || '']);
   if (testHook('DATABRAIN_TEST_APP_OSASCRIPT')) return { ok: true, stdout: action === 'running' ? 'true' : '' };
   if (action === 'launch') return runTool('/usr/bin/open', ['-g', '-j', '-a', app.bundlePath]);
-  return runTool('/usr/bin/osascript', ['-l', 'JavaScript', '-e', (action === 'running' ? runningScript : hideScript)(app.bundleId)]);
+  return runTool('/usr/bin/osascript', ['-l', 'JavaScript', '-e', (action === 'running' ? runningScript : action === 'quit' ? quitScript : hideScript)(app.bundleId)]);
 }
 const lifecycleFailure = result => ({ ok: false, stderr: 'app lifecycle action failed', stdout: result.stdout || '' });
 const runningState = result => result.stdout.trim() === 'true' ? true : result.stdout.trim() === 'false' ? false : null;
-const isRunning = async app => {
+export const isRunning = async app => {
   const result = await lifecycle('running', app);
   return result.ok && runningState(result) === true;
 };
 
 // A session starts the app lazily, on the first question that really goes to it, and only if it is not running yet.
-export async function withBackgroundApp(app, work) {
+export async function withBackgroundApp(app, work, { launch = false, quitAfter = false, onEvent = null } = {}) {
   let checked = false;
   let checkFailure = null;
   const session = {
+    closed: false,   // set when the app was not open (and so not started)
+    started: false,   // set when DataBrain itself started the app (first read only)
     launchMs: 0,   // time spent starting the app because it was not running (0 when it already was): lets the log tell a cold start from a slow question
-    run: async script => {
+    run: async (script, limitMs) => {
       if (checkFailure) return checkFailure;
       if (!checked) {
         checked = true;
+        if (!app.bundleId && !launch) { checkFailure = { ok: false, stderr: 'app is not running', stdout: '', notRunning: true }; session.closed = true; return checkFailure; }   // cannot tell it is open: an Apple event would start it
         if (app.bundleId) {
           const initialCheck = await lifecycle('running', app);
           if (!initialCheck.ok) { checkFailure = lifecycleFailure(initialCheck); return checkFailure; }
           const initialState = runningState(initialCheck);
           if (initialState === null) { checkFailure = lifecycleFailure(initialCheck); return checkFailure; }
-          if (initialState) return runInterpreter(script);
+          if (initialState) return runInterpreter(script, limitMs);
+          if (!launch) { checkFailure = { ok: false, stderr: 'app is not running', stdout: '', notRunning: true }; session.closed = true; return checkFailure; }   // Part 29: never start it
           const launchStartedAt = Date.now();
           const launched = await lifecycle('launch', app);
           if (!launched.ok) { checkFailure = lifecycleFailure(launched); return checkFailure; }
+          session.started = true; onEvent?.('started', app);
           let running = false;
           for (let i = 0; i < 40; i++) {
             const check = await lifecycle('running', app);
@@ -384,10 +404,11 @@ export async function withBackgroundApp(app, work) {
           session.launchMs = Date.now() - launchStartedAt;
         }
       }
-      return runInterpreter(script);
+      return runInterpreter(script, limitMs);
     },
   };
-  return work(session);
+  try { return await work(session); }
+  finally { if (quitAfter && session.started) { await lifecycle('quit', app).catch(() => {}); onEvent?.('quit', app); } }   // only an app DataBrain started
 }
 
 // -> { items: [{id, container, title, body, date}], known: [{i, d}], description, denied, failed }
@@ -490,7 +511,7 @@ async function writeMirror(mirrorRoot, app, items) {
 
 // Reads every app the selection covers and refreshes the mirror. Returns one summary per app: counts only, never item names.
 //   status: included | never | messages | people-events | unsafe-names | nothing-readable | denied | online-only
-export async function exportApps({ roots, mirrorRoot, manifestDir = null, apps: given = null }) {
+export async function exportApps({ roots, mirrorRoot, manifestDir = null, apps: given = null, previous = [], firstIndex = false, onEvent = null }) {
   const covering = roots.some(isApplicationsRoot);
   const explicit = roots.filter(isAppBundleRoot);
   const apps = given || discoverApps(covering ? applicationDirs() : [], explicit);
@@ -514,7 +535,17 @@ export async function exportApps({ roots, mirrorRoot, manifestDir = null, apps: 
     }
     let result = { items: [], denied: false };
     let how = null;
-    const scripted = await withBackgroundApp(app, session => readScriptable(app, session));
+    // Part 29: an app that is not open is not started and not read; what was read before stays exactly as it is (the mirror is not touched).
+    let closed = false;
+    // Part 29b: only an app with no earlier read on record (none, or a Part 29 'not-running' with no first try) may be started, once.
+    const earlier = previous.find(old => old.bundleId === app.bundleId);
+    const firstRead = firstIndex && (!earlier || (earlier.status === 'not-running' && !earlier.firstIndexTried));
+    const scripted = await withBackgroundApp(app, async session => { const read = await readScriptable(app, session); closed = session.closed; return read; }, { launch: firstRead, quitAfter: firstRead, onEvent });
+    if (closed) {
+      const before = previous.find(old => old.bundleId === app.bundleId);   // whatever was on record stays as it is (included, denied, online-only, or an earlier first try), so the 'tried once' mark is never lost
+      summaries.push(before || { name: app.name, bundleId: app.bundleId, bundlePath: app.bundlePath, sdefPath: app.sdefPath, explicit: !!app.explicit, how: 'dictionary', status: 'not-running', items: 0 });
+      continue;
+    }
     if (scripted.items.length || scripted.denied) { result = scripted; how = 'dictionary'; }
     const written = await writeMirror(mirrorRoot, app, result.items);
     // What this read saw, item by item (id, modification date, file): the next check asks the app for dates only and compares.
@@ -523,10 +554,10 @@ export async function exportApps({ roots, mirrorRoot, manifestDir = null, apps: 
         const items = {};
         for (const entry of result.known) items[entry.i] = { modified: entry.d, file: written.files.get(entry.i) || null };
         await fs.mkdir(manifestDir, { recursive: true, mode: 0o700 });
-        await fs.writeFile(manifestFile(manifestDir, app), JSON.stringify({ version: 1, className: result.description.className, items }), { mode: 0o600 });
+        await fs.writeFile(manifestFile(manifestDir, app), JSON.stringify({ version: 1, rules: MANIFEST_RULES, className: result.description.className, items }), { mode: 0o600 });
       } else await fs.unlink(manifestFile(manifestDir, app)).catch(() => {});
     }
-    summaries.push({ name: app.name, bundleId: app.bundleId, bundlePath: app.bundlePath, sdefPath: app.sdefPath, explicit: !!app.explicit, status: result.denied ? 'denied' : result.items.length ? 'included' : 'online-only', items: written.count, how, readAt: Date.now() });
+    summaries.push({ name: app.name, bundleId: app.bundleId, bundlePath: app.bundlePath, sdefPath: app.sdefPath, explicit: !!app.explicit, status: result.denied ? 'denied' : result.items.length ? 'included' : 'online-only', items: written.count, how, readAt: Date.now(), ...(firstRead ? { firstIndexTried: true } : {}) });
   }
   // an app that is gone, or no longer covered, leaves nothing behind
   if (!given) {
@@ -552,48 +583,75 @@ const INCREMENTAL_MAX = 50;
 // outcome: unchanged | updated | full-needed (no record of a last read, or too much changed) | unsupported (the dictionary has no id or
 // date to compare) | denied | failed.
 export const updateScriptable = args => withBackgroundApp(args.app, session => updateScriptableIn(args, session));
-async function updateScriptableIn({ app, mirrorRoot, manifestDir }, session) {
+// A short reason for a failed app question, from the interpreter's error text: never more than 100 characters, home folder hidden.
+// Part 13: a question to an app that gets no answer ends the check with a reason instead of waiting ten minutes. The slowest real answer seen was
+// 128 s (a task-list app under load), so the limit leaves room for that. DATABRAIN_TEST_APP_QUESTION_MS shortens it in tests.
+const questionLimitMs = () => Number(testHook('DATABRAIN_TEST_APP_QUESTION_MS')) || 5 * 60000;
+// The same instant written two ways (a different offset, with or without milliseconds) is the same date: only a different instant is a change.
+function sameDate(a, b) {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  const x = Date.parse(a); const y = Date.parse(b);
+  return !Number.isNaN(x) && !Number.isNaN(y) && x === y;
+}
+function failureReason(stderr, limitMs) {
+  if (/^timed out$/i.test(String(stderr || '').trim())) return `the app did not answer within ${Math.round(limitMs / 1000)} s`;
+  const text = String(stderr || '').replace(/\s+/g, ' ').trim().split(os.homedir()).join('~');
+  return text ? text.slice(0, 100) : 'the app gave no reason';
+}
+
+// Part 16: rules 2 = title-only items (reminders without a note) are kept. A record without it is read in full once, then compared by dates as before.
+// (The record's own `version` stays 1: the privacy release of a held app item reads records of that version.)
+const MANIFEST_RULES = 3;   // Part 19/20: rules 3 = a missing-value note (null) counts as no note, so a title-only item is kept; a rules-2 record is read in full once more
+async function updateScriptableIn({ app, mirrorRoot, manifestDir, onFound }, session) {
   let xml;
-  try { xml = await fs.readFile(app.sdefPath, 'utf8'); } catch { return { outcome: 'failed' }; }
+  try { xml = await fs.readFile(app.sdefPath, 'utf8'); } catch { return { outcome: 'failed', reason: 'the app\'s description file could not be read' }; }
   const descriptions = findTextClasses(parseSdef(xml));
-  if (!descriptions.every(descriptionNamesSafe)) return { outcome: 'failed' };
+  if (!descriptions.every(descriptionNamesSafe)) return { outcome: 'failed', reason: 'the app\'s description has names DataBrain does not trust' };
   const description = descriptions.length === 1 ? descriptions[0] : null;
   if (!description || !description.id || !description.date) return { outcome: 'unsupported' };   // nothing to compare: never has a record
   let manifest;
   try { manifest = JSON.parse(await fs.readFile(manifestFile(manifestDir, app), 'utf8')); } catch { return { outcome: 'full-needed' }; }
   if (manifest.className !== description.className) return { outcome: 'full-needed' };
+  if (manifest.rules !== MANIFEST_RULES) return { outcome: 'full-needed' };   // read before part 16: title-only items were skipped and recorded as never fetched, so one full read is needed
   const askStartedAt = Date.now();
-  const asked = await session.run(jxaDatesScript(app.bundlePath, description));
+  const limitMs = questionLimitMs();
+  const asked = await session.run(jxaDatesScript(app.bundlePath, description), limitMs);
   const timing = { askMs: Date.now() - askStartedAt - session.launchMs, launchMs: session.launchMs };
-  if (!asked.ok) return { outcome: /-1743|not authori[sz]ed|not allowed/i.test(asked.stderr) ? 'denied' : 'failed' };
+  if (!asked.ok) return { outcome: /-1743|not authori[sz]ed|not allowed/i.test(asked.stderr) ? 'denied' : 'failed', reason: failureReason(asked.stderr, limitMs), ...timing };
   let current;
-  try { current = JSON.parse(asked.stdout.trim()); } catch { return { outcome: 'failed' }; }
-  if (!Array.isArray(current.ids) || !Array.isArray(current.d) || current.ids.length !== current.d.length) return { outcome: 'failed' };
+  try { current = JSON.parse(asked.stdout.trim()); } catch { return { outcome: 'failed', reason: 'the app\'s answer could not be understood', ...timing }; }
+  if (!Array.isArray(current.ids) || !Array.isArray(current.d) || current.ids.length !== current.d.length) return { outcome: 'failed', reason: 'the app\'s answer was incomplete', ...timing };
   const now = new Map(current.ids.map((id, index) => [String(id), { raw: id, modified: current.d[index] == null ? null : String(current.d[index]) }]));
-  const toFetch = [...now].filter(([id, entry]) => !manifest.items[id] || manifest.items[id].modified !== entry.modified).map(([id]) => id);
+  const toFetch = [...now].filter(([id, entry]) => !manifest.items[id] || !sameDate(manifest.items[id].modified, entry.modified)).map(([id]) => id);
   const removed = Object.keys(manifest.items).filter(id => !now.has(id));
   if (!toFetch.length && !removed.length) return { outcome: 'unchanged', checked: now.size, ...timing };
+  try { onFound?.(); } catch {}   // the caller learns of a real change as soon as the dates show one, before the (slow) fetch of the changed items
   if (toFetch.length > INCREMENTAL_MAX) return { outcome: 'full-needed' };
   let rows = [];
+  const fetchStartedAt = Date.now();
   if (toFetch.length) {
-    const fetched = await session.run(jxaFetchScript(app.bundlePath, description, toFetch.map(id => now.get(id).raw)));
-    if (!fetched.ok) return { outcome: 'failed' };
-    try { rows = JSON.parse(fetched.stdout.trim()); } catch { return { outcome: 'failed' }; }
+    const fetched = await session.run(jxaFetchScript(app.bundlePath, description, toFetch.map(id => now.get(id).raw)), limitMs);
+    if (!fetched.ok) return { outcome: 'failed', reason: `the changed items could not be fetched (${failureReason(fetched.stderr, limitMs)})`, ...timing };
+    try { rows = JSON.parse(fetched.stdout.trim()); } catch { return { outcome: 'failed', reason: 'the changed items could not be understood', ...timing }; }
   }
+  timing.fetchMs = Date.now() - fetchStartedAt;
   const byId = new Map(rows.map(row => [String(row.i), row]));
   for (const id of removed) { if (manifest.items[id]?.file) await dropItemFile(manifest.items[id].file, mirrorRoot); delete manifest.items[id]; }
-  let written = 0;
+  let written = 0; let moved = 0;
   for (const id of toFetch) {
     const row = byId.get(id);
-    if (!row) continue;   // gone between the two questions: the next check sees it as deleted
+    if (!row) { manifest.items[id] = { modified: now.get(id).modified, file: null }; continue; }   // the app would not give this item (or it is gone): its date is recorded, so it is not asked for again every check (2026-11-11: such items made an app "updated" two days running); a deleted one drops out of the next dates answer
     const item = itemFromRow(row);
     const old = manifest.items[id];
     const file = item ? mirrorFileFor(mirrorRoot, app, item) : null;
-    if (old?.file && old.file !== file) await dropItemFile(old.file, mirrorRoot);   // edited, moved to another folder, or now skipped
+    if (old?.file && old.file !== file) { await dropItemFile(old.file, mirrorRoot); moved += 1; }   // edited, moved to another folder, or now skipped
     if (item && await writeItemFile(file, item)) written += 1;
     manifest.items[id] = { modified: now.get(id).modified, file };
   }
   await fs.writeFile(manifestFile(manifestDir, app), JSON.stringify(manifest), { mode: 0o600 });
+  // Dates that moved while every fetched item reads exactly as before (nothing written, moved or removed) are not a change: the new dates are kept, and nothing is re-screened or re-indexed.
+  if (!written && !moved && !removed.length) return { outcome: 'unchanged', checked: now.size, fetched: toFetch.length, sameContent: true, ...timing };
   return { outcome: 'updated', checked: now.size, fetched: toFetch.length, removed: removed.length, written, ...timing };
 }
 
@@ -674,6 +732,8 @@ export function appStatusLines(report) {
   for (const app of by('denied')) lines.push(`${app.name} could not be read: macOS did not allow DataBrain to control it. To allow it, open System Settings > Privacy & Security > Automation, switch on ${app.name} under Claude, then ask for a refresh.`);
   const nothing = by('nothing-readable');
   if (nothing.length) lines.push(`${sentenceList(nothing.map(app => app.name))} ${nothing.length === 1 ? 'has' : 'have'} nothing DataBrain can read.`);
+  const closed = by('not-running');
+  if (closed.length) lines.push(`${sentenceList(closed.map(app => app.name))} ${closed.length === 1 ? 'is' : 'are'} closed, so DataBrain has not read ${closed.length === 1 ? 'it' : 'them'} yet; DataBrain opens an app only once, for its first read, so it reads ${closed.length === 1 ? 'it' : 'them'} when ${closed.length === 1 ? 'it is' : 'they are'} open.`);
   const online = by('online-only');
   if (online.length) lines.push(`${sentenceList(online.map(app => app.name))} ${online.length === 1 ? 'keeps its content online or in a format' : 'keep their content online or in a format'} DataBrain can't read yet.`);
   return lines;

@@ -25,6 +25,7 @@ await fs.cp(path.join(packageRoot, 'bin'), path.join(oldRoot, 'bin'), { recursiv
 for (const file of await fs.readdir(path.dirname(newServer))) {
   if (/\.(mjs|js|json)$/.test(file)) await fs.copyFile(path.join(path.dirname(newServer), file), path.join(oldRoot, 'setup/mcp', file));
 }
+await fs.cp(path.join(path.dirname(newServer), 'hosts'), path.join(oldRoot, 'setup/mcp/hosts'), { recursive: true });   // the ChatGPT-only text file
 const oldServer = path.join(oldRoot, 'setup/mcp/server.mjs');
 const source = await fs.readFile(oldServer, 'utf8');
 const stamped = source.replace(/const SERVER_VERSION = '[^']+';/, "const SERVER_VERSION = '0.1.5';");

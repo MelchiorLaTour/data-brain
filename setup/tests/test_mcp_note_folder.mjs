@@ -51,7 +51,7 @@ try {
 
   // no folder, no default: the chat is asked, nothing is saved
   const asked = await tool('databrain_capture', note('First idea'));
-  assert(/No save folder was given/.test(asked) && asked.includes(`- ${realDocs}`) && /Nothing was saved/.test(asked), asked);
+  assert(/No save folder was given/.test(asked) && asked.includes(`- ${realDocs.replace(home, '~')}`) && /Nothing was saved/.test(asked), asked);
   assert.deepEqual(await notes(realInbox), [], 'nothing saved without a folder');
 
   // a folder outside the approved folders is refused
@@ -63,6 +63,7 @@ try {
   // with a folder: saved, and the one-time question is added to the reply of the job
   const second1 = await tool('databrain_capture', note('Second idea', { folder: realInbox }));
   assert(/Default save folder question: not asked yet/.test(second1), `the save reply says the default question was not asked yet: ${second1}`);
+  assert(/^Saved the new capture: .*Second idea\.md\. The note is written; search will find it in a moment/.test(second1) && !/not confirmed|unconfirmed|Saving the new/i.test(second1), `the reply says it is saved (and that search follows), never that the save is unconfirmed: ${second1}`);
   await saved('Second idea');
   assert.equal((await notes(realInbox)).length, 1, 'the note was saved in the chosen folder');
   assert.equal((await state()).noteFolderAsked, true, 'the question is remembered as asked');
@@ -76,7 +77,7 @@ try {
 
   // yes: the default is saved in the setup state and said in plain words
   const set = await tool('databrain_note_folder', { action: 'set', folder: realInbox });
-  assert(set.includes(`New notes are saved in ${realInbox} without asking.`), set);
+  assert(set.includes(`New notes are saved in ${realInbox.replace(home, '~')} without asking.`), set);
   assert.equal((await state()).noteDefaultFolder, realInbox);
   await tool('databrain_capture', note('Fourth idea'));
   await saved('Fourth idea');

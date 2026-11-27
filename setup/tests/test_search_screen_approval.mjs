@@ -51,17 +51,17 @@ try {
   const first = await s.tool('databrain_search', { query: 'screenprivatemarker' });
   console.log('=== SEARCH, content held ===\n' + first.slice(0, 500) + '\n=== END ===');
   assert(!leaksText(first), `Part A: a note whose indexed text is private is withheld from search (its text never shows):\n${first}`);
-  assert(/Privacy screen withheld/.test(first), `Part A: and the answer says an excerpt was withheld:\n${first}`);
+  assert(first.includes('Those files are private and cannot be accessed for privacy reasons.') && !/college-mail/.test(first), `Part A: and the answer says private files matched, without naming the file:\n${first}`);
   const list = await s.tool('databrain_privacy', { action: 'list' });
-  assert(/college-mail\.md/.test(list), `Part A: and the screen recorded it as held for the user's review:\n${list}`);
+  assert(list.startsWith('Those files are private and cannot be accessed for privacy reasons.') && !/\d|source folder|college-mail/.test(list), `Part A: and the screen recorded it as held for the user's review (one sentence, no number, no name):\n${list}`);
 
   // Part B: the user approves it in the chat; the SAME server session must show it again.
-  const decided = await s.tool('databrain_privacy', { action: 'decide', keep: ['college-mail.md'] });
-  assert(/1 allowed/.test(decided), `precondition: the approval was recorded:\n${decided}`);
+  const decided = await s.tool('databrain_privacy', { action: 'decide', keep: ['1'] });   // the only held file is number 1 in the user's review file
+  assert(/^Recorded\. The files the user kept/.test(decided), `precondition: the approval was recorded:\n${decided}`);
   await idle(); await sleep(1500);
   poison();   // whatever the refresh after the approval did, the indexed text is the same private-looking text as before
   const after = await s.tool('databrain_search', { query: 'screenprivatemarker' });
-  assert(/ordinary words here/.test(after) && !/Privacy screen withheld/.test(after), `Part B: after the user approves a held file, a search in the same session shows its text again:\n${after}`);
+  assert(/ordinary words here/.test(after) && !after.includes('Those files are private and cannot be accessed for privacy reasons.'), `Part B: after the user approves a held file, a search in the same session shows its text again:\n${after}`);
   console.log('PASS search screen: private indexed text is withheld, and an approved file is shown again in the same session');
 } finally {
   s.child.kill('SIGKILL'); await sleep(1000);

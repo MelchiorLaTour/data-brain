@@ -49,7 +49,7 @@ async function readBoundedText(response, limit) {
 }
 
 export async function checkGitHubRelease({ manifest, packageInfo, build, fetchImpl = fetch, timeoutMs = 5000 }) {
-  const packageKind = packageInfo?.kind === 'codex' ? 'codex' : 'claude';
+  const packageKind = packageInfo?.kind === 'codex' ? 'codex' : build?.package_kind === 'chatgpt' ? 'chatgpt' : 'claude';
   const version = packageKind === 'codex' ? packageInfo.version : manifest?.version;
   if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
     return { state: 'FAIL', detail: 'The installed manifest contains an invalid release version.' };
@@ -75,9 +75,12 @@ export async function checkGitHubRelease({ manifest, packageInfo, build, fetchIm
     }
     if (release.draft === true) return { state: 'BLOCKED', detail: `GitHub release ${expectedTag} is still a draft.` };
     const codexStem = `databrain-codex-${version}-${packageInfo?.architecture}`;
+    const chatgptStem = `DataBrain-ChatGPT-Installer-${version}`;
     const requiredAssets = packageKind === 'codex'
       ? [`${codexStem}.zip`, `${codexStem}.zip.sha256`, `${codexStem}.buildinfo.txt`]
-      : ['databrain.mcpb', 'databrain.mcpb.sha256', 'databrain.buildinfo.txt'];
+      : packageKind === 'chatgpt'
+        ? [`${chatgptStem}.zip`, `${chatgptStem}.zip.sha256`, `${chatgptStem}.buildinfo.txt`]
+        : ['databrain.mcpb', 'databrain.mcpb.sha256', 'databrain.buildinfo.txt'];
     const missingAssets = requiredAssets.filter(name => !release.assets.some(item => item.name === name));
     if (missingAssets.length) {
       return { state: 'BLOCKED', detail: `GitHub release ${expectedTag} is missing required asset(s): ${missingAssets.join(', ')}.` };
@@ -93,7 +96,7 @@ export async function checkGitHubRelease({ manifest, packageInfo, build, fetchIm
         return { state: 'FAIL', detail: `GitHub returned an unexpected release-asset URL for ${name}.` };
       }
     }
-    const buildInfoAsset = packageKind === 'codex' ? `${codexStem}.buildinfo.txt` : 'databrain.buildinfo.txt';
+    const buildInfoAsset = packageKind === 'codex' ? `${codexStem}.buildinfo.txt` : packageKind === 'chatgpt' ? `${chatgptStem}.buildinfo.txt` : 'databrain.buildinfo.txt';
     const asset = release.assets.find(item => item.name === buildInfoAsset);
     const assetUrl = new URL(asset.browser_download_url);
     let recordResponse = await fetchImpl(assetUrl.href, { signal: controller.signal, redirect: 'manual' });
@@ -109,6 +112,7 @@ export async function checkGitHubRelease({ manifest, packageInfo, build, fetchIm
     const published = parseBuildInfo(recordText);
     const fields = ['engine_repository', 'engine_revision', 'source_tree', 'source_sha256'];
     if (packageKind === 'codex') fields.push('package_kind', 'package_version', 'architecture', 'runtime_version');
+    if (packageKind === 'chatgpt') fields.push('package_kind', 'package_version');
     const mismatch = fields.find(field => published[field] !== build[field]);
     if (published.engine_repository !== REPOSITORY || (packageKind === 'codex' && published.package_kind !== 'codex')) {
       return { state: 'FAIL', detail: 'GitHub release record names an unexpected source repository.' };
@@ -153,7 +157,7 @@ export async function checkGitHubRelease({ manifest, packageInfo, build, fetchIm
     if (tagged?.type !== 'commit' || tagged.sha !== build.engine_revision) {
       return { state: 'FAIL', detail: `GitHub release tag ${expectedTag} does not resolve to the installed source revision.` };
     }
-    const artifactLabel = packageKind === 'codex' ? `Codex ${packageInfo.architecture} ZIP/checksum` : 'MCPB/checksum';
+    const artifactLabel = packageKind === 'codex' ? `Codex ${packageInfo.architecture} ZIP/checksum` : packageKind === 'chatgpt' ? 'ChatGPT installer ZIP/checksum' : 'MCPB/checksum';
     return { state: 'PASS', detail: `Installed ${packageKind} version ${version}, engine revision ${build.engine_revision.slice(0, 12)}, and packaged payload digest match the release record; required ${artifactLabel} assets are present, the source revision exists, and the release tag resolves to it.` };
   } catch (error) {
     if (error?.name === 'PayloadTooLargeError') return { state: 'FAIL', detail: error.message };

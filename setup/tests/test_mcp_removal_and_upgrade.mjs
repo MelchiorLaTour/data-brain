@@ -50,12 +50,16 @@ try {
     await until(async () => /Stage: (?:verification pending|ready)\./.test((await tool('databrain_setup_status'))), 'setup finished by itself');
     for (const marker of ['alphatextmarker', 'alphartfmarker', 'betatextmarker']) assert(grepAll(marker, dataHome) !== '', `${marker} should be present before removal`);
     assert(grepAll('bank statement march', dataHome) !== '', 'the held file name is recorded before removal');
+    // part 18: a file still waiting for a decision when its folder is removed. Listing writes the local review file, which names it; removal must delete that file too.
+    await fs.appendFile(path.join(dataHome, '.databrain', 'privacy.tsv'), `held\t${path.join(canonicalAlpha, 'alpha-pending-secret.md')}\tsynthetic held row\n`);
+    await tool('databrain_privacy', { action: 'list' });
+    assert(grepAll('alpha-pending-secret', dataHome) !== '', 'the review file names the pending held file before removal');
   });
   await session(home, [canonicalBeta], async tool => {
     await tool('databrain_setup_status');   // applies the new folder list
     await until(async () => grepAll('alphatextmarker', dataHome) === '' && grepAll('alpha-note.md', dataHome) === '', 'removed folder text gone');
     await until(async () => (await tool('databrain_setup_status')).includes('Selected source folders: 1'), 'one folder selected');
-    for (const leftover of ['alphatextmarker', 'alphartfmarker', 'alphabankmarker', 'alpha-note.md', 'alpha-letter.rtf', 'bank statement march', 'AlphaFolderUnique']) {
+    for (const leftover of ['alphatextmarker', 'alphartfmarker', 'alphabankmarker', 'alpha-note.md', 'alpha-letter.rtf', 'bank statement march', 'alpha-pending-secret', 'AlphaFolderUnique']) {
       assert.equal(grepAll(leftover, dataHome), '', `"${leftover}" from the removed folder must not remain anywhere in the DataBrain folder: ${grepAll(leftover, dataHome)}`);
     }
     assert(grepAll('betatextmarker', dataHome) !== '', 'the remaining folder stays indexed');
@@ -67,18 +71,19 @@ try {
   await fs.writeFile(path.join(canonicalBeta, 'harmless-new.md'), '# New\nnewharmlessmarker\n');
   await session(home, [canonicalBeta], async rawTool => {
     const announcements = [];
-    const tool = async (...args) => { const text = await rawTool(...args); const hit = /Held back for privacy: \d+ file\(s\) waiting for the user's decision \(\d+ of them newly held since the last notice\)\./.exec(text); if (hit) announcements.push(hit[0]); return text; };
+    const tool = async (...args) => { const text = await rawTool(...args); if (text.startsWith('Those files are private and cannot be accessed for privacy reasons.\n\n')) announcements.push('Those files are private and cannot be accessed for privacy reasons.'); return text; };
     await until(async () => /Stage: (?:verification pending|ready)\./.test((await tool('databrain_setup_status'))), 'stage settled');
     await tool('databrain_refresh');
     await until(async () => (await fs.readFile(path.join(dataHome, 'moc', 'index.tsv'), 'utf8')).includes('harmless-new.md'), 'refresh indexed the harmless file');
     await until(async () => /Stage: (?:verification pending|ready)\./.test((await tool('databrain_setup_status'))) || null, 'refresh settled');
     await tool('databrain_search', { query: 'newharmlessmarker' });
     await tool('databrain_setup_status');
-    assert.deepEqual(announcements, ["Held back for privacy: 1 file(s) waiting for the user's decision (1 of them newly held since the last notice)."], `the held file must be announced exactly once across all replies: ${JSON.stringify(announcements)}`);
+    assert.deepEqual(announcements, ['Those files are private and cannot be accessed for privacy reasons.'], `the held file must be announced exactly once across all replies, as the one private sentence: ${JSON.stringify(announcements)}`);
     assert(grepAll('latehelddmarker', dataHome) === '', 'the held file text must not be indexed');
     const listed = await tool('databrain_privacy', { action: 'list' });
-    assert(/payslip-july\.md/.test(listed), listed);
-    assert(!/newly held since the last notice/.test(await tool('databrain_setup_status')), 'no repeat after the list was shown');
+    assert(listed.startsWith('Those files are private and cannot be accessed for privacy reasons.') && !/\d|payslip-july/.test(listed), `the chat list is the one sentence and names no file:\n${listed}`);
+    assert(/payslip-july\.md/.test(await fs.readFile(path.join(dataHome, 'Private files review.txt'), 'utf8')), 'the local review file names it');
+    assert(!(await tool('databrain_setup_status')).startsWith('Those files are private and cannot be accessed for privacy reasons.\n\n'), 'no repeat after the list was shown');
   });
 
   // ---- 3: upgrade paths

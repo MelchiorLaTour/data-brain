@@ -17,9 +17,12 @@ const engine = path.resolve(process.argv[2] || path.resolve(here, '../..'));
 const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-renumber-')));
 const home = path.join(temp, 'home');
 
+// ChatGPT host: no parent and no settings list; setup and re-approval name the folders in the chat (server.mjs lines 1948-1960, 2756-2775).
+const chatgpt = process.env.DATABRAIN_TEST_CLIENT === 'chatgpt';
 function startServer(parent, roots, extraEnv = {}) {
-  const server = spawn(process.execPath, [serverScript, '--databrain-parent', parent, '--databrain-source-roots', ...roots],
-    { env: { ...process.env, HOME: home, DATABRAIN_TEST_STEP_BY_STEP: '1', ...extraEnv }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const server = spawn(process.execPath, [serverScript, ...(chatgpt ? ['--databrain-client', 'chatgpt'] : ['--databrain-parent', parent, '--databrain-source-roots', ...roots])],   // ChatGPT: folders are named in the chat, the brain is in ~/DataBrain
+   
+    { env: { ...process.env, HOME: home, ...(chatgpt ? {} : { DATABRAIN_TEST_STEP_BY_STEP: '1' }), ...extraEnv }, stdio: ['pipe', 'pipe', 'pipe'] });
   const replies = new Map();
   readline.createInterface({ input: server.stdout }).on('line', line => { const message = JSON.parse(line); replies.get(message.id)?.(message); });
   server.stderr.resume();
@@ -59,7 +62,7 @@ try {
   const fileB = path.join(B, 'renumber-b.md');
   await fs.writeFile(fileA, '# Note A\nrenumberalphamarker\n');
   await fs.writeFile(fileB, '# Note B\nrenumberbetamarker\n');
-  const dataHome = path.join(canonicalParent, 'DataBrain');
+  const dataHome = chatgpt ? path.join(await fs.realpath(home), 'DataBrain') : path.join(canonicalParent, 'DataBrain');
   const statePath = path.join(dataHome, '.databrain', 'desktop-state.json');
   const tsvPath = path.join(dataHome, '.databrain', 'root-identities.tsv');
   const realDev = root => lstatSync(root).dev;
@@ -69,15 +72,18 @@ try {
   const setup = startServer(canonicalParent, [A, B]);
   try {
     await setup.ready();
-    assert((await setup.call('databrain_setup_start')).includes('Creating DataBrain'));
-    await waitFor(setup.call, 'databrain_setup_status', 'Stage: sources selected');
+    if (chatgpt) { const t = await setup.call('databrain_setup_start', { folders: [A, B] }); assert(t.includes('Creating DataBrain'), t); }   // the test server auto-consents (DATABRAIN_TEST_CONSENT is not 'ask')
+    else assert((await setup.call('databrain_setup_start')).includes('Creating DataBrain'));
+    await waitFor(setup.call, 'databrain_setup_status', chatgpt ? 'Stage: ready' : 'Stage: sources selected');   // ChatGPT indexes the two real notes by itself
   } finally { await setup.stop(); }
   const moc = path.join(dataHome, 'moc');
+  if (!chatgpt) {
   await fs.mkdir(moc, { recursive: true });
   await fs.writeFile(path.join(moc, 'index.tsv'), `${fileA}\tNote A\ttest\trenumberalphamarker\n${fileB}\tNote B\ttest\trenumberbetamarker\n`);
   const built = spawnSync('/bin/bash', [path.join(engine, 'bin/build-fts.sh')], {
     env: { ...process.env, HOME: home, NB_MOC_DIR: moc, NB_CANON_ROOTS_FILE: path.join(dataHome, '.source-roots') }, encoding: 'utf8' });
   assert.equal(built.status, 0, `could not seed the disposable search database: ${built.stderr}`);
+  }
 
   // The 0.1.45 stuck state: the saved dev is wrong, the inode is right, in the state file AND in the tsv the shell scripts read.
   async function makeStuck() {
@@ -114,7 +120,7 @@ try {
   const reapprove = startServer(canonicalParent, [A, B], { DATABRAIN_TEST_NO_RENUMBER_HEAL: '1' });
   try {
     await reapprove.ready();
-    const job = await reapprove.call('databrain_select_sources');
+    const job = await reapprove.call('databrain_select_sources', chatgpt ? { folders: [A, B], confirmed: true } : {});
     assert(job.includes('Reconciliation job:'), job);
     await waitFor(reapprove.call, 'databrain_setup_status', 'source grant reconciliation: complete');
     await expectFresh('re-approval through select sources');
@@ -125,7 +131,8 @@ try {
   const dropOne = startServer(canonicalParent, [B], { DATABRAIN_TEST_NO_RENUMBER_HEAL: '1' });
   try {
     await dropOne.ready();
-    await dropOne.call('databrain_search', { query: 'renumberbetamarker' });   // a tool call applies the settings change by itself
+    if (chatgpt) { await dropOne.call('databrain_select_sources', { folders: [B], confirmed: true }); await waitFor(dropOne.call, 'databrain_setup_status', 'source grant reconciliation: complete'); }   // ChatGPT: the new list is named in the chat
+    else await dropOne.call('databrain_search', { query: 'renumberbetamarker' });   // a tool call applies the settings change by itself
     const state = await readJson(statePath);
     assert.deepEqual(state.roots, [B]);
     assert.equal(state.rootIdentities.find(entry => entry.path === B).dev, realDev(B), 'the kept folder must be re-captured, not carried over stale');
@@ -137,16 +144,20 @@ try {
   await fs.mkdir(strictParent); await fs.mkdir(strictSrc);
   const strictRoot = await fs.realpath(strictSrc);
   await fs.writeFile(path.join(strictRoot, 'original.md'), '# O\noriginalstrictmarker\n');
-  const strict = startServer(await fs.realpath(strictParent), [strictRoot]);
+  const strictHome = path.join(temp, 'strict home');   // ChatGPT: its own ~/DataBrain
+  await fs.mkdir(strictHome);
+  const strictEnv = chatgpt ? { HOME: strictHome } : {};
+  const strict = startServer(await fs.realpath(strictParent), [strictRoot], strictEnv);
   try {
     await strict.ready();
-    await strict.call('databrain_setup_start');
-    await waitFor(strict.call, 'databrain_setup_status', 'Stage: sources selected');
+    if (chatgpt) await strict.call('databrain_setup_start', { folders: [strictRoot] });
+    else await strict.call('databrain_setup_start');
+    await waitFor(strict.call, 'databrain_setup_status', chatgpt ? 'Stage: ready' : 'Stage: sources selected');
   } finally { await strict.stop(); }
   await fs.rename(strictRoot, `${strictRoot}.original`);
   await fs.mkdir(strictRoot);
   await fs.writeFile(path.join(strictRoot, 'replacement.md'), '# R\nreplacementstrictsecret\n');
-  const strictState = path.join(await fs.realpath(strictParent), 'DataBrain', '.databrain', 'desktop-state.json');
+  const strictState = path.join(chatgpt ? await fs.realpath(strictHome) : await fs.realpath(strictParent), 'DataBrain', '.databrain', 'desktop-state.json');
   // Worst case for the refresh rule: the replacement has a new inode AND the saved dev is also off. It must still be refused.
   const strictTsv = path.join(path.dirname(strictState), 'root-identities.tsv');
   const strictSaved = await readJson(strictState);
@@ -154,7 +165,7 @@ try {
   await fs.writeFile(strictState, `${JSON.stringify(strictSaved, null, 2)}\n`);
   await fs.writeFile(strictTsv, `${strictSaved.rootIdentities[0].path}\t${strictSaved.rootIdentities[0].dev}:${strictSaved.rootIdentities[0].ino}\n`);
   const savedIno = strictSaved.rootIdentities[0].ino;
-  const replaced = startServer(await fs.realpath(strictParent), [strictRoot]);
+  const replaced = startServer(await fs.realpath(strictParent), [strictRoot], strictEnv);
   try {
     await replaced.ready();
     const denied = await replaced.call('databrain_search', { query: 'replacementstrictsecret' });

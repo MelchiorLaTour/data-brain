@@ -31,7 +31,7 @@ await fs.writeFile(path.join(root, 'sub', 'oldname.md'), '# Moving\nffrenamemark
 const dataHome = path.join(home, 'DataBrain');
 let n = 0;
 function startServer(extraEnv = {}) {
-  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', root], { env: { ...process.env, HOME: home, DATABRAIN_FRESHNESS_CHECK_MS: '100', ...extraEnv }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', root], { env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, DATABRAIN_FRESHNESS_CHECK_MS: '100', ...extraEnv }, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map();
   readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
   const ask = (method, params) => new Promise(resolve => { const id = ++n; waiting.set(id, resolve); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });
@@ -123,7 +123,8 @@ try {
   }
   const idx = await indexText();
   for (const name of ['payslip-march.md', 'plain-name.md', 'dep.md', 'photo.jpg', 'sneaky.md', 'secret.md']) assert(!idx.split('\n').some(l => l.split('\t')[0].endsWith(`/${name}`)), `${name} has no row`);
-  const held = await server.tool('databrain_privacy', { action: 'list' });
+  await server.tool('databrain_privacy', { action: 'list' });
+  const held = await fs.readFile(path.join(dataHome, 'Private files review.txt'), 'utf8');   // part 18: the names are in the local review file; the chat list has numbers only
   assert(/payslip-march\.md/.test(held) && /plain-name\.md/.test(held), `the private name and the private text are on the held list:\n${held}`);
   if (haveTextutil) {
     assert(!(await hasRow('statement.docx')), 'a Word file holding an IBAN is held back after it is read, and its row is dropped');

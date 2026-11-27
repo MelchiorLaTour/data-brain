@@ -26,11 +26,13 @@ const serverScript = process.env.DATABRAIN_SERVER || path.join(here, '../mcp/ser
 const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-repair-')));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, label, limit = 150000) { for (const t0 = Date.now(); !(await check()); await sleep(300)) assert(Date.now() - t0 < limit, `timed out: ${label}`); }
-const REPAIR_LINE = 'DataBrain repair is available: ask Claude to run DataBrain repair.';
+// The repair line names the host app (server.mjs line 1326: `ask ${HOST} to run DataBrain repair`); ChatGPT keeps the repair tool.
+const chatgpt = process.env.DATABRAIN_TEST_CLIENT === 'chatgpt';
+const REPAIR_LINE = chatgpt ? 'DataBrain repair is available: ask ChatGPT to run DataBrain repair.' : 'DataBrain repair is available: ask Claude to run DataBrain repair.';
 const kids = [];
 
 function start(home, parent, roots, env = {}) {
-  const child = spawn(process.execPath, [serverScript, '--databrain-parent', parent, '--databrain-source-roots', ...roots],
+  const child = spawn(process.execPath, [serverScript, ...(chatgpt ? ['--databrain-client', 'chatgpt'] : ['--databrain-parent', parent, '--databrain-source-roots', ...roots])],   // ChatGPT: no parent and no settings list; the folders live in the brain's own state
     { env: { ...process.env, HOME: home, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
   child.stderr.resume();
   const waiting = new Map();
@@ -60,7 +62,7 @@ async function makeBrain(label, rootSpecs) {
     for (const [file, text] of Object.entries(files)) await fs.writeFile(path.join(dir, file), text);
     roots.push(await fs.realpath(dir));
   }
-  const dataHome = path.join(await fs.realpath(parent), 'DataBrain');
+  const dataHome = chatgpt ? path.join(await fs.realpath(home), 'DataBrain') : path.join(await fs.realpath(parent), 'DataBrain');   // ChatGPT keeps the brain in ~/DataBrain
   const brain = {
     home, parent, roots, dataHome,
     statePath: path.join(dataHome, '.databrain', 'desktop-state.json'),
@@ -75,7 +77,7 @@ async function makeBrain(label, rootSpecs) {
   };
   const first = brain.start();
   await first.ready;
-  await first.tool('databrain_setup_start');
+  if (chatgpt) { await first.tool('databrain_setup_start', { folders: roots }); await first.tool('databrain_setup_start', { folders: roots, confirmed: true }); } else await first.tool('databrain_setup_start');
   await until(async () => (await first.tool('databrain_setup_status')).includes('DataBrain is ready'), `${label}: the first setup to be ready`);
   await first.stop();
   return brain;
@@ -276,7 +278,8 @@ try {
   }
 
   // ---------- S6 + S7: two folders, one replaced ----------
-  {
+  if (chatgpt) console.log('NOT APPLICABLE on ChatGPT: S6 and S7 (a root revoked in the Claude settings list, remove-save-add in Settings): ChatGPT has no settings list.');
+  else {
     const specs = [['alpha', { 'a1.md': '# A1\nalphamarker one.\n', 'a2.md': '# A2\nsecond alpha note.\n' }], ['bravo', { 'b1.md': '# B1\nbravomarker one.\n', 'b2.md': '# B2\nsecond bravo note.\n' }]];
     const brain = await makeBrain('s6', specs);
     const [alpha, bravo] = brain.roots;
@@ -311,7 +314,7 @@ try {
       assert.equal(await hash(brain.statePath), stateBytes, 'a refused re-approval changes nothing');
     } finally { await third.stop(); }
   }
-  {
+  if (!chatgpt) {
     const specs = [['alpha', { 'a1.md': '# A1\nalphamarkerseven one.\n', 'a2.md': '# A2\nsecond alpha note.\n' }], ['bravo', { 'b1.md': '# B1\nbravomarkerseven one.\n', 'b2.md': '# B2\nsecond bravo note.\n' }]];
     const brain = await makeBrain('s7', specs);
     const [alpha, bravo] = brain.roots;
@@ -332,7 +335,8 @@ try {
     } finally { await added.stop(); }
   }
 
-  console.log('PASS: repair fixes a renumbered disk, a stale lock, a dead job record, an unlabeled row, an empty, missing and unreadable search database and an interrupted stage with no other action; it changes nothing on a healthy brain; diagnostics and repair answer while a folder check would throw; a replaced folder is re-approved only by reapprove for a listed folder; remove-save-add in settings works with two folders.');
+  if (chatgpt) console.log('PASS (ChatGPT, S1-S5 only; S6-S7 not applicable): repair, with the line naming ChatGPT, fixes a renumbered disk, a stale lock, a dead job record, an unlabeled row, an empty, missing and unreadable search database and an interrupted stage; a healthy brain is left as it was; a replaced folder is re-approved only when it is listed.');
+  else console.log('PASS: repair fixes a renumbered disk, a stale lock, a dead job record, an unlabeled row, an empty, missing and unreadable search database and an interrupted stage with no other action; it changes nothing on a healthy brain; diagnostics and repair answer while a folder check would throw; a replaced folder is re-approved only by reapprove for a listed folder; remove-save-add in settings works with two folders.');
 } finally {
   for (const kid of kids) kid.kill('SIGKILL');
   await sleep(1500);

@@ -42,7 +42,7 @@ const dataHome = path.join(home, 'DataBrain');
 let id = 0;
 function startServer() {
   const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', realApps, realDocs], {
-    env: { ...process.env, HOME: home, DATABRAIN_TEST_APP_DIRS: appsDir, DATABRAIN_TEST_APP_OSASCRIPT: stub, DATABRAIN_TEST_APP_RECENT_MS: '0', FIXTURE: fixture, DATABRAIN_FRESHNESS_CHECK_MS: '100' },
+    env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, DATABRAIN_TEST_APP_DIRS: appsDir, DATABRAIN_TEST_APP_OSASCRIPT: stub, DATABRAIN_TEST_APP_RECENT_MS: '0', FIXTURE: fixture, DATABRAIN_FRESHNESS_CHECK_MS: '100' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const waiting = new Map();

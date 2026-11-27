@@ -71,7 +71,7 @@ try {
   await fs.writeFile(release, 'go');
   const result = await reading;
   assert.doesNotMatch(result, /SYNTHETIC_ONLY_CANARY_RACE|FR1420041010050500013M02606/, `private current text must not escape:\n${result}`);
-  assert.match(result, /holds it back|looks private|IBAN/i, `read explains that current text is held:\n${result}`);
+  assert.match(result, /Those files are private and cannot be accessed for privacy reasons\./, `read explains that current text is held:\n${result}`);
   assert.equal(stderr.trim(), '', 'server produced no stderr');
   console.log('PASS: benign read works; same-inode private edit during the open race is held with no source text returned.');
 } finally {

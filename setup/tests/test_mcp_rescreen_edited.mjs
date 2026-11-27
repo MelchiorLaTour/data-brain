@@ -46,8 +46,10 @@ async function scenario(path_) {
     for (const name of ['alpha', 'bravo', 'charlie', 'delta']) assert(await rowFor(`${name}.md`), `${name}.md is indexed at setup`);
     // the note with an IBAN was held at setup; the user reviews the list and keeps it. A kept file is indexed by the next refresh, which the first question brings
     const listed = await tool('databrain_privacy', { action: 'list' });
-    assert(/kept\.md/.test(listed) && !/alpha\.md|bravo\.md|charlie\.md|delta\.md/.test(listed), `only the IBAN note was held at setup:\n${listed}`);
-    assert(/Recorded: .* 1 allowed/.test(await tool('databrain_privacy', { action: 'decide', keep: ['kept.md'] })), 'the user keeps it');
+    const review = await fs.readFile(path.join(dataHome, 'Private files review.txt'), 'utf8');   // part 18: names live in the local file; the chat list has numbers
+    assert(/kept\.md/.test(review) && !/alpha\.md|bravo\.md|charlie\.md|delta\.md/.test(review) && !/kept\.md/.test(listed) && listed.startsWith('Those files are private and cannot be accessed for privacy reasons.') && /^1\. /m.test(review) && !/^2\. /m.test(review), `only the IBAN note was held at setup:\n${listed}\n${review}`);
+    const keptNumber = review.split('\n').find(line => line.includes('kept.md')).match(/^(\d+)\. /)[1];
+    assert(/^Recorded\. The files the user kept/.test(await tool('databrain_privacy', { action: 'decide', keep: [keptNumber] })), 'the user keeps it');
     await sleep(300);
     await tool('databrain_search', { query: 'rescreenkeptbase' });
     await until(() => rowFor('kept.md'), `${path_}: the note the user kept is indexed`, 60000);
@@ -75,8 +77,9 @@ async function scenario(path_) {
       assert.equal(inDatabase(`rescreen${file.replace('.md', '')}base`), '0', `${path_}: the rest of ${file} left the search database too`);
     }
     const held = await tool('databrain_privacy', { action: 'list' });
-    for (const file of ['alpha.md', 'bravo.md', 'charlie.md']) assert(held.includes(file), `${path_}: ${file} is on the held list:\n${held}`);
-    assert(!held.includes('delta.md'), `${path_}: the ordinary note is not held`);
+    const heldFile = await fs.readFile(path.join(dataHome, 'Private files review.txt'), 'utf8');   // part 18: names are in the local file only
+    for (const file of ['alpha.md', 'bravo.md', 'charlie.md']) assert(heldFile.includes(file) && !held.includes(file), `${path_}: ${file} is on the held list (local file, not the chat list):\n${held}\n${heldFile}`);
+    assert(!heldFile.includes('delta.md'), `${path_}: the ordinary note is not held`);
     // the user's earlier decision stands
     assert(/kept\.md/.test(await tool('databrain_search', { query: 'rescreenkeptword' })), `${path_}: the note the user chose to keep stays indexed after another edit`);
     assert(await rowFor('kept.md'), `${path_}: kept.md still has its row`);

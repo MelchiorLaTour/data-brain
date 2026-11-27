@@ -135,7 +135,7 @@ try {
   for (const title of ['Garden plan', 'Locked diary', 'Trip log', 'plans', 'ideas']) assert(!status.split('\n').filter(line => /^(?:Apps|Included apps|Never read|Found but not read)/.test(line)).join('\n').includes(title), `status must not name items ("${title}")`);
 
   // 5) privacy: the private-looking item is held by name and never indexed
-  assert(/payslip march/.test(await tool('databrain_privacy', { action: 'list' })) || /Held back for privacy review/.test(status), 'the private-looking item is held for review');
+  assert((await tool('databrain_privacy', { action: 'list' })).includes('Those files are private and cannot be accessed for privacy reasons.') || status.includes('Those files are private and cannot be accessed for privacy reasons.'), 'the private-looking item is held for review');
 
   // 6) refresh picks up new, edited and deleted app items
   await fs.writeFile(fixtureA, JSON.stringify([...memos.filter(item => item.t !== 'Garden plan'), { t: 'New idea', b: 'freshmemomarker a brand new memo', c: 'Home' }]));

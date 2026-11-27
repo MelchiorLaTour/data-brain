@@ -231,7 +231,8 @@ try {
     const readResult = await mcp.call('databrain_read', { path: mcp.source });
     assert.match(readResult, /now online-only in a cloud drive/, `the test must reach the dataless cached-text branch:\n${readResult}`);
     assert.doesNotMatch(readResult, new RegExp(canary, 'i'), `online-only cached read must withhold the indexed canary:\n${readResult}`);
-    assert.match(readResult, /does not show indexed text that is held back or cannot be privacy-checked/i, `online-only cached read should say the excerpt was withheld:\n${readResult}`);
+    assert.match(readResult, /does not show indexed text it could not privacy-check\./, `online-only cached read should say the excerpt could not be privacy-checked:\n${readResult}`);
+    assert.doesNotMatch(readResult, /Those files are private/, `an ordinary file that could not be checked is not called private:\n${readResult}`);
     await fs.chmod(mcpLedger, 0o600);
   } finally {
     await fs.chmod(mcp.source, 0o600).catch(() => {});

@@ -15,7 +15,7 @@ const launcher = process.env.DATABRAIN_TEST_LAUNCHER;
 const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-skewed-50-')));
 const home = path.join(temp, 'home');
 const desktop = path.join(home, 'Desktop');
-const dataHome = path.join(desktop, 'DataBrain');
+const dataHome = process.env.DATABRAIN_TEST_CLIENT === 'chatgpt' && !process.env.DATABRAIN_TEST_LAUNCHER ? path.join(home, 'DataBrain') : path.join(desktop, 'DataBrain');   // ChatGPT keeps the brain in ~/DataBrain
 const corpus = path.join(temp, 'synthetic-approved-sources');
 const selectionFile = path.join(temp, 'selection.txt');
 const categories = [
@@ -56,15 +56,16 @@ for (const [category, count] of categories) {
 }
 assert.equal(expected.length, 50);
 
+// ChatGPT host: no destination chooser and no settings list; the folder is named in the chat and the brain lives in ~/DataBrain (server.mjs lines 1948-1960).
+const chatgpt = process.env.DATABRAIN_TEST_CLIENT === 'chatgpt' && !launcher;
 const server = spawn(launcher || process.execPath,
-  launcher ? [] : [path.join(engine, 'setup/mcp/server.mjs')], {
+  launcher ? [] : [path.join(engine, 'setup/mcp/server.mjs'), ...(chatgpt ? ['--databrain-client', 'chatgpt'] : [])], {
   env: {
     ...process.env,
     HOME: home,
     DATABRAIN_TEST_PRIVACY_CONSENT: 'yes',
     DATABRAIN_ENGINE_DIR: engine,
-    DATABRAIN_TEST_HOME: dataHome,
-    DATABRAIN_TEST_SELECTION_FILE: selectionFile,
+    ...(chatgpt ? {} : { DATABRAIN_TEST_HOME: dataHome, DATABRAIN_TEST_SELECTION_FILE: selectionFile }),   // the chooser hooks do not exist on ChatGPT
     PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
   },
   stdio: ['pipe', 'pipe', 'pipe'],
@@ -118,7 +119,10 @@ try {
   });
   server.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
 
-  if (launcher) {
+  if (chatgpt) {
+    await call('databrain_setup_start', { folders: [canonicalCorpus] });
+    await call('databrain_setup_start', { folders: [canonicalCorpus], confirmed: true });
+  } else if (launcher) {
     await fs.writeFile(selectionFile, JSON.stringify({
       selections: { sources: [canonicalCorpus], 'destination-parent': [desktop] },
       approved: true,
@@ -136,9 +140,15 @@ try {
   // The privacy screen may hold fixture names that look private; the user here says all of them are fine.
   const afterScan = await waitForStatus(status => status.startsWith('SETUP PAUSED FOR PRIVACY REVIEW') || status.includes('Stage: taxonomy pending.'), 'privacy scan or indexing');
   if (afterScan.startsWith('SETUP PAUSED FOR PRIVACY REVIEW')) {
-    const held = (await call('databrain_privacy', { action: 'list' })).split('\n').filter(line => line.startsWith('- ')).map(line => line.slice(2).replace(/ \([^()]*\)$/, ''));
-    console.log(`privacy screen held ${held.length} fixture file(s): ${held.slice(0, 3).join(' | ')}`);
-    await call('databrain_privacy', { action: 'decide', keep: held });
+    // part 22: the chat says one sentence; the user keeps files by marking "keep: yes" in the local review file, then says they reviewed it
+    const said = await call('databrain_privacy', { action: 'list' });
+    assert(said.includes('Those files are private and cannot be accessed for privacy reasons.') && !/\d+ file/.test(said), `the chat gets only the one sentence:\n${said}`);
+    const reviewPath = path.join(dataHome, 'Private files review.txt');
+    const review = await fs.readFile(reviewPath, 'utf8');
+    const heldLines = review.split('\n').filter(line => /^\d+\. .*keep: no/.test(line));
+    console.log(`privacy screen held ${heldLines.length} fixture file(s)`);
+    await fs.writeFile(reviewPath, review.split('\n').map(line => /^\d+\. .*keep: no/.test(line) ? line.replace('keep: no', 'keep: yes') : line).join('\n'));
+    await call('databrain_privacy', { action: 'decide' });
   }
   const indexedStatus = await waitForStatus(status =>
     status.includes('Stage: taxonomy pending.') && status.includes('Indexed rows: 50.') &&
@@ -210,22 +220,31 @@ try {
   assert.match(postHealth, /Ranked search database: 50 source files; 50 FTS section rows; quick_check ok\./, postHealth);
   const installAudit = await call('databrain_verify_install');
   assert.match(installAudit, /Installed DataBrain audit: PARTIAL — inspect failed or blocked checks below\./, installAudit);
+  // ChatGPT host: this test runs the Claude package layout, which has no ChatGPT version file, so the package-identity line and its repository
+  // line are not checked here; the ChatGPT payload's identity and digest are covered by test_chatgpt_installer.mjs.
+  if (!chatgpt) {
   assert.match(installAudit, launcher
     ? /(PASS|PARTIAL): Package identity — DataBrain Codex \d+\.\d+\.\d+ \(darwin-(?:arm64|x64)\); .*app payload and source digest match/
     : /(PASS|PARTIAL): Package identity — DataBrain \d+\.\d+\.\d+; packaged files match their embedded digest/);
   assert.match(installAudit, /https:\/\/github\.com\/MelchiorLaTour\/data-brain\.git @ [0-9a-f]{12}/);
+  }
   assert.match(installAudit, /PASS: Selected-source health/);
   assert.match(installAudit, /(PASS|FAIL|BLOCKED): GitHub release match/);
   assert.match(installAudit, /PASS: Setup contract/);
   assert.match(installAudit, /PASS: Known-hit search\/read/);
   assert.match(installAudit, /PASS: Absent-query probe/);
-  assert.match(installAudit, launcher
+  if (chatgpt) assert.match(installAudit, /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; bundle root ".+"/);
+  else assert.match(installAudit, launcher
     ? /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; package root ".+"; loaded version 0\.1\.0; engine revision [0-9a-f]{12}\./
     : /PASS: Active DataBrain process — This tool call confirms the DataBrain MCP process is serving the current conversation; bundle root ".+"; loaded version \d+\.\d+\.\d+; engine revision [0-9a-f]{12}\./);
-  assert.match(installAudit, launcher
+  assert.match(installAudit, chatgpt
+    ? /BLOCKED: Original package provenance — ChatGPT exposes the unpacked plugin/
+    : launcher
     ? /BLOCKED: Original ZIP archive provenance — The active MCP process/
     : /BLOCKED: Original MCPB archive provenance — Claude Desktop exposes the unpacked extension/);
-  assert.match(installAudit, /BLOCKED: Desktop install record and restart/);
+  assert.match(installAudit, chatgpt
+    ? /BLOCKED: Desktop install record and restart — The active process cannot inspect ChatGPT registration/
+    : /BLOCKED: Desktop install record and restart/);
   assert.match(installAudit, launcher
     ? /audits the running package against the GitHub release build record for its exact manifest version, including prereleases/
     : /audits the running bundle against the GitHub release build record for its exact manifest version, including prereleases/);

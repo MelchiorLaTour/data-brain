@@ -24,7 +24,7 @@ await fs.writeFile(path.join(docs, 'plain.md'), '# Plain\nplainmarker an ordinar
 const list = path.join(temp, 'dataless.txt'); await fs.writeFile(list, '');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let n = 0;
-const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', docs], { env: { ...process.env, HOME: home, NB_TEST_DATALESS_LIST: list, DATABRAIN_FRESHNESS_CHECK_MS: '3600000' }, stdio: ['pipe', 'pipe', 'pipe'] });
+const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', docs], { env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, NB_TEST_DATALESS_LIST: list, DATABRAIN_FRESHNESS_CHECK_MS: '3600000' }, stdio: ['pipe', 'pipe', 'pipe'] });
 const waiting = new Map();
 readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
 const ask = (method, params) => new Promise(resolve => { const id = ++n; waiting.set(id, resolve); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });

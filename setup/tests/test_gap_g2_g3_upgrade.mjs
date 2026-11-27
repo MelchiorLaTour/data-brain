@@ -99,6 +99,7 @@ try {
   if (!UNCHANGED) {
     const list = await server.tool('databrain_privacy', { action: 'list' });
     console.log('=== privacy list ===\n' + list + '\n=== END ===');
+    // This test runs the REAL old 0.1.38 package, whose own privacy flow lists the held items by name and keeps them by name (the part 18 and part 22 flows are in the current build only).
     const orderLine = list.split('\n').find(line => line.includes('Order mail'));
     assert(orderLine, `the new Order mail item is held (email + token):\n${list}`);
     const heldName = orderLine.replace(/^[-*\s\d.]*/, '').split(/ [-—(]/)[0].trim();

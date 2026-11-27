@@ -71,7 +71,9 @@ function start(env = {}) {
 let server = null;
 try {
   // no timer anywhere in the product that could poll for changes
-  assert(!/setInterval\s*\(/.test(await fs.readFile(serverScript, 'utf8')), 'the server must not contain setInterval');
+  // no timer polls the apps or the folders. Timers that exist for other reasons (queued-note drain, old-server retirement, the loop-stall log) never touch them.
+  const timers = (await fs.readFile(serverScript, 'utf8')).split('\n').filter(line => /setInterval\s*\(/.test(line));
+  assert(timers.every(line => !/freshness|rereadChangedApps|readApps|appCheck|checkFreshness|exportApp|updateScriptable/i.test(line)), `no timer polls for changes:\n${timers.join('\n')}`);
 
   server = start({ DATABRAIN_TEST_APP_FALLBACK_MS: '3600000' }); await server.ready;
   await server.tool('databrain_setup_start');

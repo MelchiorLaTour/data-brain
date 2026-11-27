@@ -43,6 +43,8 @@ for file in "${ENGINE_BIN_FILES[@]}"; do
   cp "$ROOT/bin/$file" "$STAGE/bin/$file"
 done
 cp "$ROOT/setup/mcp/server.mjs" "$ROOT/setup/mcp/relationship-core.mjs" "$ROOT/setup/mcp/taxonomy-core.mjs" "$ROOT/setup/mcp/freshness-core.mjs" "$ROOT/setup/mcp/github-release-check.mjs" "$ROOT/setup/mcp/codex-state.mjs" "$ROOT/setup/mcp/package-identity.mjs" "$ROOT/setup/mcp/pdf-extract.js" "$ROOT/setup/mcp/app-readers.mjs" "$ROOT/setup/mcp/app-policy.mjs" "$ROOT/setup/mcp/test-hooks.mjs" "$STAGE/setup/mcp/"
+mkdir -p "$STAGE/setup/mcp/hosts"
+cp "$ROOT/setup/mcp/hosts/chatgpt.mjs" "$STAGE/setup/mcp/hosts/"
 
 engine_revision="$(git -C "$ROOT" rev-parse HEAD)"
 engine_repository="$(git -C "$ROOT" remote get-url origin)"

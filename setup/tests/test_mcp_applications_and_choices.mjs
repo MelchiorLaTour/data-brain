@@ -56,7 +56,13 @@ try {
   const offered = await tool('databrain_capture', note('Offer'));
   assert(/No save folder was given/.test(offered), offered);
   const listed = offered.split('\n').filter(line => line.startsWith('- ')).map(line => line.slice(2));
-  assert.deepEqual(listed, [docs], `only the document folder is offered, got ${listed}`);
+  const shownDocs = `~${docs.slice(home.length)}`;   // results show the home folder as ~ (displayPath)
+  assert.deepEqual(listed, [shownDocs], `only the document folder is offered, got ${listed}`);
+  assert(shownDocs.startsWith('~/'), `the offered folder is in the ~/ form: ${shownDocs}`);
+  // the string the model sees ("~/Documents") must work when it is passed back
+  const savedBack = await tool('databrain_capture', { ...note('Offered folder'), folder: listed[0] });
+  assert(/Saved to: /.test(savedBack), `capturing with the offered ${listed[0]} saves: ${savedBack}`);
+  await until(async () => (await fs.readdir(docs)).some(name => name.includes('Offered folder')), 'the note is in the real Documents folder');
   assert(!offered.includes('app-content') && !offered.includes(realApps), offered);
   for (const folder of [realOtherContent, path.join(dataHome, 'app-content'), realApps]) {
     await tool('databrain_capture', { ...note('Refused'), folder });
@@ -77,7 +83,7 @@ try {
   await tool('databrain_refresh');
   await until(async () => /Stage: indexing\.|update is running|refresh/i.test(await tool('databrain_setup_status')), 'refresh running');
   const set = await tool('databrain_note_folder', { action: 'set', folder: inbox });
-  assert(set.includes(`New notes are saved in ${inbox} without asking.`), set);
+  assert(set.includes(`New notes are saved in ~${inbox.slice(home.length)} without asking.`), set);   // shown with ~ for the home folder
   await until(async () => /Stage: ready\./.test(await tool('databrain_setup_status')), 'refresh done');
   assert.equal((await state()).noteDefaultFolder, inbox, 'the default survived the refresh');
   assert(!(await fs.readFile(path.join(dataHome, 'moc', 'index.tsv'), 'utf8')).includes(realApps), 'the refresh dropped the leftover Applications row');

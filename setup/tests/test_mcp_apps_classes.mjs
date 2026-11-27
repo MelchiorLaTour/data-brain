@@ -84,13 +84,31 @@ if (action === 'running') console.log(exists || process.env.ALWAYS_RUNNING === '
 
   await fs.writeFile(rows, JSON.stringify([{ i: 'c-1', t: 'First card', b: 'classesmarker written body', d: null, c: 'Home' }]));
 
-  // not running: started hidden, read, and left running; never quit
+  // not running (Part 29): never started, not read, nothing written; the summary says it is closed
   await reset();
   let result = await readApp('Cardbox', sdefPath);
-  assert.deepEqual(await calls(), ['running', 'launch', 'running', 'hide', 'read'], `an app that was not running: ${JSON.stringify(await calls())}`);
-  assert.equal(result.summaries[0].status, 'included');
-  assert.equal(await fs.readFile(process.env.STATE, 'utf8'), 'on', 'the app DataBrain started stays running');
+  assert.deepEqual(await calls(), ['running'], `an app that is not running is only asked whether it runs, never started: ${JSON.stringify(await calls())}`);
+  assert.equal(result.summaries[0].status, 'not-running');
+  assert.equal(await fs.readFile(process.env.STATE, 'utf8').catch(() => 'off'), 'off', 'DataBrain did not start the app');
+  assert.deepEqual(await files(result.mirrorRoot), [], 'nothing is written for a closed app');
+  // the old start-hidden path still works when asked for explicitly (kept as an option, never used by the product)
+  await reset();
+  const started = await readers.withBackgroundApp({ name: 'Cardbox', bundleId: 'test.Cardbox', bundlePath: path.join(temp, 'Cardbox.app') }, session => session.run('x'), { launch: true });
+  assert.deepEqual(await calls(), ['running', 'launch', 'running', 'hide', 'read'], `launch: true starts it hidden: ${JSON.stringify(await calls())}`);
+  assert.equal(started.ok, true);
+  await reset(); await fs.writeFile(process.env.STATE, 'on'); await readApp('Cardbox', sdefPath);   // leave it open for the checks below
 
+  // a closed app that was read before keeps what it had: same summary, mirror untouched (Part 29)
+  {
+    const before = await readApp('Keeper', sdefPath);   // the app is open here (state file present)
+    assert.equal(before.summaries[0].status, 'included');
+    const filesBefore = await files(before.mirrorRoot);
+    await fs.rm(process.env.STATE, { force: true });
+    const { summaries } = await readers.exportApps({ roots: [temp], mirrorRoot: before.mirrorRoot, previous: before.summaries, apps: [{ name: 'Keeper', bundleId: 'test.Keeper', bundlePath: path.join(temp, 'Keeper.app'), sdefPath, explicit: false }] });
+    assert.deepEqual(summaries, before.summaries, 'a closed app keeps its earlier summary');
+    assert.deepEqual(await files(before.mirrorRoot), filesBefore, 'a closed app leaves its mirror as it was');
+    await fs.writeFile(process.env.STATE, 'on');
+  }
   // the next check finds it running: no launch, no hide, no quit
   await fs.rm(log, { force: true });
   await readApp('Cardbox', sdefPath);
@@ -132,7 +150,7 @@ if (action === 'running') console.log(exists || process.env.ALWAYS_RUNNING === '
     assert(readers.appStatusLines({ summaries: result.summaries }).some(line => /Evilbox has a scripting dictionary with names DataBrain does not accept, so it is not read\./.test(line)), `${label}: status says why`);
   }
   assert.equal(readers.descriptionNamesSafe(readers.findTextClasses(readers.parseSdef(`<dictionary><suite name="S">${cls('note', ['name', 'plaintext', ['id', 'text'], ['modification date', 'date'], ['password protected', 'boolean']])}</suite></dictionary>`))[0]), true, 'ordinary names are accepted');
-  console.log('PASS: only real written bodies are read; apps with people or events in their dictionary are skipped without any question; an app that was not running is started hidden once and left running, one that was running is never touched');
+  console.log('PASS: only real written bodies are read; apps with people or events in their dictionary are skipped without any question; an app that is not running is never started (only asked whether it runs), one that was running is never touched');
 } finally {
   await fs.rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }).catch(() => {});
 }

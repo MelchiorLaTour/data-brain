@@ -86,7 +86,7 @@ const baseEnv = {
 };
 let requestId = 0;
 function startServer() {
-  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', realApps, realDocs], { env: baseEnv, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', realApps, realDocs], { env: { ...baseEnv, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300' }, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map();
   let stderr = '';
   child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-4000); });
@@ -149,7 +149,7 @@ try {
   const refreshEndsBefore = await refreshCount('job-end');
   const housekeepingEndsBefore = await housekeepingCount('job-end');
   const checking = startServer(); servers.push(checking); await checking.ready;
-  await until(async () => (await appCheckCount('job-start')) > startsBefore && (await callLog()).includes('full'), 'the second server begins its slow app read', 30000).catch(async error => {
+  await until(async () => (await appCheckCount('job-start')) > startsBefore && (await callLog()).includes('dates'), 'the second server begins its slow app read', 30000).catch(async error => {
     throw new Error(`${error.message}\nstage: ${await savedStage().catch(() => 'unavailable')}\napp report: ${await fs.readFile(reportPath, 'utf8').catch(() => 'unavailable')}\napp calls: ${JSON.stringify(await callLog())}\nstage timing:\n${(await timing()).slice(-30).map(row => row.join('\t')).join('\n')}`);
   });
   await fs.writeFile(ordinaryFile, '# Ordinary file added during app check\nstartupHealthNewFolderMarker.\n');
@@ -159,7 +159,7 @@ try {
   assert.match(firstHealth, /App check: running/, `health identifies the slow unchanged app check:\n${firstHealth}`);
   const runningDiagnostics = await checking.tool('databrain_diagnostics');
   assert.match(runningDiagnostics, /^Running jobs: app check: running \(job ID [0-9a-f-]+; started \d{4}-\d{2}-\d{2}T[^\n]+Z\)$/m, `diagnostics identify the active job and its start time:\n${runningDiagnostics}`);
-  assert.deepEqual(await callLog(), ['full'], 'the startup app check read the unchanged synthetic app once');
+  assert.deepEqual(await callLog(), ['dates'], 'the startup app check asked the unchanged synthetic app for dates once, no full read');
 
   const startedWaitingAt = Date.now();
   const healthHistory = [firstHealth];
@@ -176,7 +176,7 @@ try {
   await until(async () => (await refreshCount('job-end')) > refreshEndsBefore, 'the ordinary file refresh completes');
   await until(async () => (await housekeepingCount('job-end')) > housekeepingEndsBefore, 'index housekeeping after the ordinary file refresh completes');
   assert((await refreshCount('job-start')) > refreshStartsBefore, 'the file is refreshed without a search or setup-status call');
-  assert.deepEqual(await callLog(), ['full'], 'refreshing the ordinary file did not trigger another app read');
+  assert.deepEqual(await callLog(), ['dates'], 'refreshing the ordinary file did not trigger another app read');
   assert((await fs.readFile(path.join(dataHome, 'moc', 'index.tsv'), 'utf8')).includes(ordinaryFile), 'the ordinary file is in the index');
   assert.match(await checking.tool('databrain_diagnostics'), /^Running jobs: none$/m, 'completed jobs are absent from the running-jobs line');
   await fs.writeFile(delayFile, '0');

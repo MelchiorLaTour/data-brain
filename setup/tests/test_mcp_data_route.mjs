@@ -84,7 +84,7 @@ server = startServer();
 
 function request(id, method, params = {}) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`MCP request timed out: ${method}`)), 5000);
+    const timer = setTimeout(() => reject(new Error(`MCP request timed out: ${method} (request ${id})`)), 5000);
     waiters.set(id, message => { clearTimeout(timer); waiters.delete(id); resolve(message); });
     server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
   });
@@ -161,13 +161,17 @@ try {
   const resumedSetup = await request(20, 'tools/call', { name: 'databrain_setup_run', arguments: {} });
   assert(resumedSetup.result.content[0].text.includes('Indexing started'), `cancelled setup could not resume: ${resumedSetup.result.content[0].text}`);
   let setupStatus = '';
-  for (let attempt = 0; attempt < 600; attempt += 1) {
+  // Poll until the stage has settled (KNOWN-RISKS #2): the stage flips to taxonomy pending a moment before the job's completion line and the gap sentence
+  // are written, so one read right after the flip lost the race on a busy Mac. Up to 120 s; the elapsed time is printed.
+  const settleStart = Date.now();
+  for (let attempt = 0; Date.now() - settleStart < 120000; attempt += 1) {
     const reply = await request(100 + attempt, 'tools/call', { name: 'databrain_setup_status', arguments: {} });
     setupStatus = reply.result.content[0].text;
-    if (setupStatus.includes('Stage: taxonomy pending') && !/initial indexing: running/.test(setupStatus)) break;   // the stage flips a moment before the job's own completion line is written
+    if (setupStatus.includes('Stage: taxonomy pending') && !/initial indexing: running/.test(setupStatus) && setupStatus.includes('Some files are reported as gaps; a refresh after they are resolved reads them.')) break;
     if (setupStatus.includes('initial indexing: failed')) break;
     await new Promise(resolve => setTimeout(resolve, 50));
   }
+  console.log(`settled after ${Date.now() - settleStart} ms`);
   assert(setupStatus.includes('Stage: taxonomy pending'), `initial indexing did not finish: ${setupStatus}`);
   assert(setupStatus.includes('Some files are reported as gaps; a refresh after they are resolved reads them.'), `indexing did not state the fixture's unreadable-file gap: ${setupStatus}`);
   assert(setupStatus.includes('File inventory: 6 indexed, 0 eligible missing from index, 1 unsupported; unreadable 1'), `file inventory did not reconcile selected and unreadable files: ${setupStatus}`);
@@ -384,7 +388,9 @@ try {
     await fs.writeFile(rootRace.release, 'resume realpath');
     const rootSwapRead = await rootSwapReadPromise;
     const rootSwapText = rootSwapRead.result.content[0].text;
-    assert.match(rootSwapText, /approved source folder changed identity/i, `replacement source root was not rejected: ${rootSwapText}`);
+    // Part 39: with two approved folders, a replaced one pauses only itself; the reply names it and reads nothing from it.
+    assert(rootSwapText.includes(`${path.basename(sourceRoot)} is paused: a different folder now sits at this path`), `replaced source root was not named as paused: ${rootSwapText}`);
+    assert(rootSwapText.includes('Nothing was read from it'), `paused-folder reply did not say nothing was read: ${rootSwapText}`);
     assert(!rootSwapText.includes('REPLACEMENT_ROOT_SECRET'), 'replacement-root content was disclosed');
   } finally {
     await fs.writeFile(rootRace.release, 'resume realpath');
@@ -625,10 +631,10 @@ try {
   const heldWriteRoot = `${sourceRoot}.note-race-held`;
   await Promise.all([fs.rm(noteRace.signal, { force: true }), fs.rm(noteRace.release, { force: true })]);
   await fs.writeFile(noteRace.arm, createHash('sha256').update(`note-${Date.now()}`).digest('hex'));
-  const racingWrite = await request(438, 'tools/call', { name: 'databrain_capture', arguments: {
+  // The reply now comes after the note file is written (0.2.1 part 6), so it cannot be awaited before the write is released: send, pause, swap, release, then read it.
+  const racingWritePending = request(438, 'tools/call', { name: 'databrain_capture', arguments: {
     title: 'Raced capture fixture', body: 'PRIVATE_NOTE_BODY must stay out of a replacement folder.', keywords: ['raced', 'capture'], folder: sourceRoot,
   } });
-  assert(racingWrite.result.content[0].text.includes('Save job:'), `write race fixture did not start: ${racingWrite.result.content[0].text}`);
   let noteOpenPaused = false;
   for (let attempt = 0; attempt < 200; attempt += 1) {
     try { await fs.lstat(noteRace.signal); noteOpenPaused = true; break; } catch {}
@@ -639,6 +645,8 @@ try {
     await fs.rename(sourceRoot, heldWriteRoot);
     await fs.mkdir(sourceRoot);
     await fs.writeFile(noteRace.release, 'resume note open');
+    const racingWrite = await racingWritePending;
+    assert(racingWrite.result.content[0].text.includes('Save job:'), `write race fixture did not start: ${racingWrite.result.content[0].text}`);
     let racedWriteStatus = '';
     for (let attempt = 0; attempt < 200; attempt += 1) {
       const reply = await request(4400 + attempt, 'tools/call', { name: 'databrain_setup_status', arguments: {} });

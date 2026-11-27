@@ -58,7 +58,7 @@ else { console.error('unexpected script'); process.exit(4); }
 const dataHome = path.join(home, 'DataBrain');
 let n = 0;
 function startServer() {
-  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', realApps, realDocs], { env: { ...process.env, HOME: home, DATABRAIN_TEST_APP_DIRS: appsDir, DATABRAIN_TEST_APP_RECENT_MS: '0', DATABRAIN_TEST_APP_OSASCRIPT: stub, ROWS_DIR: temp, DATABRAIN_FRESHNESS_CHECK_MS: '3600000', DATABRAIN_TEST_FRESH_CAP_MS: '12000', DATABRAIN_TEST_STATUS_WAIT_MS: '1000' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [serverScript, '--databrain-source-roots', realApps, realDocs], { env: { ...process.env, DATABRAIN_TEST_HOUSEKEEPING_IDLE_MS: '300', HOME: home, DATABRAIN_TEST_APP_DIRS: appsDir, DATABRAIN_TEST_APP_RECENT_MS: '0', DATABRAIN_TEST_APP_OSASCRIPT: stub, ROWS_DIR: temp, DATABRAIN_FRESHNESS_CHECK_MS: '3600000', DATABRAIN_TEST_FRESH_CAP_MS: '12000', DATABRAIN_TEST_STATUS_WAIT_MS: '1000' }, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map();
   readline.createInterface({ input: child.stdout }).on('line', line => { const m = JSON.parse(line); waiting.get(m.id)?.(m); });
   const ask = (method, params) => new Promise(resolve => { const id = ++n; waiting.set(id, resolve); child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });
@@ -107,9 +107,10 @@ try {
   await note('zorblat.md', '# Zorblat soup\nzorblat soup: 3 carrots, 1 lime. refund account FR7630006000011234567890189\n');
   const readHeld = await server.tool('databrain_read', { path: hitPath });
   assert(!/FR76|3000600001|carrots/.test(readHeld), `the edit that holds an IBAN returns nothing from the file:\n${readHeld}`);
-  assert(/holds it back|looks private/.test(readHeld), `and says plainly that it is held:\n${readHeld}`);
+  assert(/Those files are private and cannot be accessed for privacy reasons\./.test(readHeld), `and says plainly that it is held:\n${readHeld}`);
   const privacyList = await server.tool('databrain_privacy', { action: 'list' });
-  assert(/zorblat\.md/.test(privacyList), `the file is on the held list:\n${privacyList.slice(0, 300)}`);
+  const reviewText = await fs.readFile(path.join(dataHome, 'Private files review.txt'), 'utf8');   // part 18: names are in the local file, not in the chat list
+  assert(/zorblat\.md/.test(reviewText) && !/zorblat/.test(privacyList), `the file is on the held list (local file only):\n${privacyList.slice(0, 300)}\n${reviewText.slice(0, 300)}`);
 
   // C) an app item edited in the app
   await writeRows('Datebook', [rowFor('Datebook-1', 'First page', 'readdatebookfirst stays', '2026-01-01T10:00:00Z'), rowFor('Datebook-2', 'Second page', 'readdatebooksecond now has lime', '2026-05-05T10:00:00Z')]);
@@ -120,7 +121,7 @@ try {
   assert(/now has lime/.test(readApp) && !/second before/.test(readApp), `read gives the app's current text:\n${readApp}`);
   await writeRows('Datebook', [rowFor('Datebook-1', 'First page', 'readdatebookfirst stays', '2026-01-01T10:00:00Z'), rowFor('Datebook-2', 'Second page', 'readdatebooksecond refund FR7630006000011234567890189', '2026-06-06T10:00:00Z')]);
   const readAppHeld = await server.tool('databrain_read', { path: appPath });
-  assert(!/FR76|3000600001/.test(readAppHeld) && /holds it back|looks private/.test(readAppHeld), `an app edit that holds an IBAN is held:\n${readAppHeld}`);
+  assert(!/FR76|3000600001/.test(readAppHeld) && /Those files are private and cannot be accessed for privacy reasons\./.test(readAppHeld), `an app edit that holds an IBAN is held:\n${readAppHeld}`);
 
   // D) the refresh still follows
   const next = await server.tool('databrain_search', { query: 'zorblat' });
