@@ -6,8 +6,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = process.env.DOC_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const docs = ['README.md', 'Mac download/Claude app/README.md', 'Mac download/Claude app/databrain-app-guide.html'];
+const root = process.env.DOC_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const docs = ['Claude app (Mac)/README.md', 'Claude app (Mac)/databrain-app-guide.html'];
 const versioned = /databrain[-_ ]v?\d+(\.\d+)+[^\s"'<>)]*\.mcpb|\/releases\/download\/v?\d/ig;
 const texts = {};
 for (const doc of docs) {
@@ -16,7 +16,7 @@ for (const doc of docs) {
   assert.deepEqual(hits, [], `${doc} names a versioned package: ${hits.join(' | ')}`);
 }
 // the two documents with the numbered steps carry the fixed name in step 1 and step 5, and keep the duplicate-name hint
-for (const doc of ['README.md', 'Mac download/Claude app/databrain-app-guide.html']) {
+for (const doc of ['Claude app (Mac)/README.md', 'Claude app (Mac)/databrain-app-guide.html']) {
   const text = texts[doc];
   assert(text.includes('releases/latest/download/databrain.mcpb'), `${doc}: step 1 must link releases/latest/download/databrain.mcpb`);
   assert(/click (\*\*|<strong>)databrain\.mcpb(\*\*|<\/strong>)/.test(text), `${doc}: step 5 must tell the reader to click databrain.mcpb`);

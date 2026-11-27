@@ -12,10 +12,10 @@ import { fileURLToPath } from 'node:url';
 delete process.env.DATABRAIN_TEST_NO_AUTO_LABELS;
 delete process.env.DATABRAIN_TEST_STEP_BY_STEP;
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.join(here, '../..');
+const repo = path.join(here, '../../..');
 const LINE = `For ANY question about me (I, my, me, my life, work, hobbies, plans, or anything I keep or wrote), call databrain_search FIRST, even when general knowledge could answer it; general knowledge is not "memory". Start the answer with "From your files:" and where it comes from; if the answer does not come from DataBrain, start with "From general knowledge:". If DataBrain finds nothing, say so before falling back.`;
-const readme = await fs.readFile(path.join(repo, 'README.md'), 'utf8');
-const guidePath = process.env.DATABRAIN_GUIDE ?? path.join(repo, 'Mac download', 'Claude app', 'databrain-app-guide.html');
+const readme = await fs.readFile(path.join(repo, 'Claude app (Mac)', 'README.md'), 'utf8');
+const guidePath = process.env.DATABRAIN_GUIDE ?? path.join(repo, 'Claude app (Mac)', 'databrain-app-guide.html');
 const html = await fs.readFile(guidePath, 'utf8');
 
 const decodeEntities = text => text.replace(/&quot;/g, '"').replace(/&#39;|&#x27;/gi, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
@@ -53,9 +53,9 @@ const after12 = text => text.slice(text.indexOf('12 →'), text.indexOf('12 →'
 assert(/send the question DataBrain gave you/.test(after12(readme)) && /send the question DataBrain gave you/.test(after12(html)) && !/In DataBrain, what/.test(readme + html), 'step 12 says to send the question DataBrain gave you (no fixed test message)');
 const ALTWORDS = /Folders DataBrain can read/;
 assert(readme.includes('This section should look somewhat like this:') && html.includes('This section should look somewhat like this:'), 'step 7 carries the caption in README and guide');
-assert(/!\[[^\]]*Folders DataBrain can read[^\]]*\]\(Mac%20download\/Claude%20app\/configure-example\.png\)/.test(readme), 'README references the screenshot with alt text');
+assert(/!\[[^\]]*Folders DataBrain can read[^\]]*\]\(configure-example\.png\)/.test(readme), 'README references the screenshot with alt text');
 assert(/<img [^>]*src="configure-example\.png"[^>]*alt="[^"]*Folders DataBrain can read[^"]*"/.test(html), 'the guide references the screenshot with alt text');
-const png = await fs.readFile(path.join(repo, 'Mac download', 'Claude app', 'configure-example.png'));
+const png = await fs.readFile(path.join(repo, 'Claude app (Mac)', 'configure-example.png'));
 assert(png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && png.length > 20000, 'the screenshot is a real PNG next to the guide');
 assert(!/\/Users\/melchior/i.test(readme + html), 'no personal folder path in the README or the guide');
 for (const [name, text] of [['README', readme], ['guide', html]]) assert(/⋯/.test(text) && /to the right of (<strong>|\*\*)Configure/.test(text) && /Uninstall(<\/strong>|\*\*) \(red\)/.test(text), `${name}: the uninstall line names the ⋯ button right of Configure and the red Uninstall`);

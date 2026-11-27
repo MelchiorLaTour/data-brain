@@ -25,7 +25,7 @@ const noFail = (text, label) => assert(!/^FAIL:/m.test(text), `verify_install mu
 // "Installing" = putting a copy of the engine in a new folder (the app unpacks the .mcpb into its own folder).
 async function install(name) {
   const target = path.join(temp, name);
-  const skip = new Set(['scratch', 'research', 'docs', 'windows', '.git', 'Mac download', 'node_modules']);
+  const skip = new Set(['scratch', 'research', 'docs', 'windows', '.git', 'node_modules']);
   await fs.cp(engineRoot, target, { recursive: true, filter: source => !skip.has(path.basename(source)) || source !== path.join(engineRoot, path.basename(source)) });
   return path.join(target, path.relative(engineRoot, serverScript));
 }

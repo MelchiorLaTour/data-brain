@@ -13,7 +13,7 @@ Rules for the agent executing the agent steps:
   files and CONFIRMED with the user before writing.
 - **Never move, rename, copy, or delete a user file.** The engine's contract.
 - **Session-state convention:** after finishing each step, append one line to
-  `INSTALL-STATE.md` at the repo root — `step N — done — next: <step>`. If your session
+  `INSTALL-STATE.md` at the root of the `Terminal version (recommended)` folder — `step N — done — next: <step>`. If your session
   compacts or dies, the next session reads `INSTALL-STATE.md` and resumes from there.
 
 Prerequisites: bash, `rg` (ripgrep), `sqlite3` (install.sh checks and tells you what's missing).

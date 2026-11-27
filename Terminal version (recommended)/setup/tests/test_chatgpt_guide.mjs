@@ -7,10 +7,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = process.env.DOC_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const html = await fs.readFile(path.join(root, 'Mac download/ChatGPT app/databrain-chatgpt-guide.html'), 'utf8');
+const root = process.env.DOC_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const html = await fs.readFile(path.join(root, 'ChatGPT app (Mac)/databrain-chatgpt-guide.html'), 'utf8');
 const readme = await fs.readFile(path.join(root, 'README.md'), 'utf8');
-const macReadme = await fs.readFile(path.join(root, 'Mac download/ChatGPT app/README.md'), 'utf8');
+const macReadme = await fs.readFile(path.join(root, 'ChatGPT app (Mac)/README.md'), 'utf8');
 const plain = text => text.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ' ').replace(/<(?:br|\/li|\/p|\/h\d|\/button|\/span)[^>]*>/g, ' ').replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const text = plain(html);
 
@@ -20,9 +20,9 @@ assert(steps.length <= 12, `at most 12 steps, found ${steps.length}`);
 
 const PRIVACY = "Your files stay on your Mac. DataBrain has no cloud server and stores nothing of yours. On ChatGPT, only the query and the snippets needed to answer it are sent to OpenAI's model.";
 for (const [name, doc] of [['guide', text], ['README', plain(readme)]]) assert(doc.includes(PRIVACY), `${name} carries the privacy sentence word for word`);
-assert(!/nothing (?:ever )?leaves|nothing is sent/i.test(text + plain(readme).match(/Download for the ChatGPT app[\s\S]*?## Compatibility/)?.[0]), 'no "nothing leaves the machine" claim');
+assert(!/nothing (?:ever )?leaves|nothing is sent/i.test(text + plain(readme) + plain(macReadme)), 'no "nothing leaves the machine" claim');
 assert(!/Claude/i.test(text), 'the ChatGPT guide never names Claude');
-for (const doc of [html, macReadme, readme.match(/## Download for the ChatGPT app[\s\S]*?## Compatibility/)[0]]) assert(!doc.includes('—'), 'no em-dash');
+for (const doc of [html, macReadme, readme]) assert(!doc.includes('—'), 'no em-dash');
 
 // the two things the order names: the installer download and the exact Open Anyway path
 assert(html.includes('releases/download/v0.2.1/DataBrain-ChatGPT-Installer-0.2.1.zip'), 'the guide links the versioned installer, never "latest"');
@@ -44,8 +44,8 @@ assert(/Run the installer again[\s\S]{0,200}keeps your folders/.test(text), 'the
 // Part 21 (Mel, 2026-11-16): a ChatGPT user is never asked to paste anything into Custom Instructions. Nothing the user can read mentions them:
 // the guide, both READMEs' ChatGPT parts, the installer and uninstaller, the skill and the build script.
 const NO_CI = /custom[\s-]*instruction|personali[sz]ation|copy-line|data-copy="[^"]*databrain_search/i;
-const chatgptDocs = [['guide html', html], ['ChatGPT README', macReadme], ['README ChatGPT part', readme.match(/## Download for the ChatGPT app[\s\S]*?## Compatibility/)[0]]];
-for (const rel of ['setup/chatgpt/Install DataBrain for ChatGPT.command', 'setup/chatgpt/Uninstall DataBrain for ChatGPT.command', 'setup/chatgpt/build.sh', 'setup/chatgpt/skills/databrain-save-note/SKILL.md']) chatgptDocs.push([rel, await fs.readFile(path.join(root, rel), 'utf8')]);
+const chatgptDocs = [['guide html', html], ['ChatGPT README', macReadme], ['front page README', readme]];
+for (const rel of ['setup/chatgpt/Install DataBrain for ChatGPT.command', 'setup/chatgpt/Uninstall DataBrain for ChatGPT.command', 'setup/chatgpt/build.sh', 'setup/chatgpt/skills/databrain-save-note/SKILL.md']) chatgptDocs.push([rel, await fs.readFile(path.join(root, 'Terminal version (recommended)', rel), 'utf8')]);
 for (const [name, doc] of chatgptDocs) assert(!NO_CI.test(doc), `${name} must not mention Custom Instructions or Personalization`);
 assert(!/<button class="copy"[^>]*databrain_search/.test(html), 'no pasted search rule in the guide');
 assert(/Private files review\.txt/.test(text) && /keep: no[\s\S]{0,40}keep: yes/.test(text) && /I reviewed my private files/.test(text) && /never says which/.test(text), 'the guide says how to keep a private file: the review file, keep: yes, and the sentence to tell ChatGPT');
@@ -61,8 +61,9 @@ assert(/Pre-release/.test(text) && !/Tested on one Mac/.test(text), 'the page do
   const stepText = n => plain(html.match(new RegExp(`<span class="n">${n} →</span>([\\s\\S]*?)</li>`))?.[1] ?? '');
   assert(/Improve the model for everyone/.test(stepText(1)) && /before you download anything/.test(stepText(1)), `step 1 is the Improve the model setting: ${stepText(1).slice(0, 120)}`);
   assert(!/Improve the model for everyone/.test(steps.slice(1).map(stepText).join(' ')), 'the training setting is only step 1');
-  for (const phrase of ['data-brain', 'Mac download', 'ChatGPT app', 'download link in the heading', 'only opens a preview page']) assert(stepText(2).includes(phrase), `step 2 says "${phrase}": ${stepText(2).slice(0, 200)}`);
-  for (const phrase of ['Mac download', 'ChatGPT app', 'download link in the heading']) assert(readme.includes(phrase), `the README steps say "${phrase}"`);
+  for (const phrase of ['data-brain', 'ChatGPT app (Mac)', 'download link in the heading', 'only opens a preview page']) assert(stepText(2).includes(phrase), `step 2 says "${phrase}": ${stepText(2).slice(0, 200)}`);
+  assert(readme.includes('(ChatGPT%20app%20%28Mac%29)'), 'the front page links the ChatGPT app (Mac) folder');
+  assert(macReadme.includes('Use the link in this heading instead'), 'the folder README says to use the download link in the heading');
 }
 // part 34: ChatGPT's own "Enable ChatGPT Computer Use" window is not DataBrain's; step 10 says so in one small italic note
 {
@@ -80,5 +81,5 @@ assert(/Pre-release/.test(text) && !/Tested on one Mac/.test(text), 'the page do
   assert(/font-style:\s*italic/.test(fine) && Number(fine.match(/font-size:\s*(\d+)px/)?.[1]) <= 15 && /color:\s*var\(--muted\)/.test(fine), `.fine is small italic muted text (readable on the guide's dark page): ${fine}`);
 }
 // the README and the downloads folder point at the same installer
-assert(readme.includes('Mac%20download/ChatGPT%20app/DataBrain-ChatGPT-Installer-0.2.1.zip') && macReadme.includes('DataBrain-ChatGPT-Installer-0.2.1.zip'));
+assert(macReadme.includes('raw/main/ChatGPT%20app%20%28Mac%29/DataBrain-ChatGPT-Installer-0.2.1.zip'), 'the folder README links the installer at its new path');
 console.log(`PASS: ChatGPT guide: ${steps.length} steps, the installer and the Open Anyway path, the picker folder step, the privacy sentence word for word, the training note, no Custom Instructions anywhere, repair and no-AI recovery, no Claude wording, no em-dash, ${checks} [CHECK] markers.`);

@@ -15,7 +15,7 @@ command -v zip >/dev/null 2>&1 || { echo 'build: zip is required' >&2; exit 2; }
 
 mkdir -p "$STAGE/bin" "$STAGE/setup/mcp"
 cp "$MANIFEST" "$STAGE/manifest.json"
-cp "$ROOT/LICENSE" "$STAGE/LICENSE"
+cp "$ROOT/../LICENSE" "$STAGE/LICENSE"
 # Package only the shared-engine scripts called by the MCP server and their shared helper.
 # In particular, do not copy corpus-derived dictionaries or other repository content.
 ENGINE_BIN_FILES=(

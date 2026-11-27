@@ -1,8 +1,8 @@
 # DataBrain for the ChatGPT app (Mac) (test)
 
-**Test build.** Not released yet: still being tested in the ChatGPT app. Do not use it unless you were asked to test it.
+## [Click here to download DataBrain-ChatGPT-Installer-0.2.1.zip](https://github.com/MelchiorLaTour/data-brain/raw/main/ChatGPT%20app%20%28Mac%29/DataBrain-ChatGPT-Installer-0.2.1.zip)
 
-## [Click here to download DataBrain-ChatGPT-Installer-0.2.1.zip](https://github.com/MelchiorLaTour/data-brain/raw/main/Mac%20download/ChatGPT%20app/DataBrain-ChatGPT-Installer-0.2.1.zip)
+**Test build.** Not released yet: still being tested in the ChatGPT app. Do not use it unless you were asked to test it.
 
 It downloads straight to your Downloads folder. Then follow the install steps you were sent, or open the [guide](databrain-chatgpt-guide.html).
 
@@ -12,4 +12,4 @@ Your files stay on your Mac. DataBrain has no cloud server and stores nothing of
 
 We recommend turning off "Improve the model for everyone" (ChatGPT → Settings… → Data controls). Consumer ChatGPT plans train on chats by default, and the passages DataBrain returns to answer you become part of your chat. DataBrain does not change this setting itself.
 
-Using Claude instead? Open the **Claude app** folder next to this one.
+Using Claude instead? Open the **Claude app (Mac)** folder next to this one.

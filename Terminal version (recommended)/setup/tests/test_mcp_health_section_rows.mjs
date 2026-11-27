@@ -6,8 +6,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const serverScript = process.env.DATABRAIN_SERVER || path.join(here, '../mcp/server.mjs');
 const temp = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'databrain-healthsections-')));
 const home = path.join(temp, 'home'); const docs = path.join(home, 'Documents');

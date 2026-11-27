@@ -7,8 +7,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = process.env.DOC_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const html = await fs.readFile(path.join(root, 'Mac download/ChatGPT app/databrain-chatgpt-guide.html'), 'utf8');
+const root = process.env.DOC_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const html = await fs.readFile(path.join(root, 'ChatGPT app (Mac)/databrain-chatgpt-guide.html'), 'utf8');
 const step = n => html.match(new RegExp(`<span class="n">${n} →</span>([\\s\\S]*?)</li>`))?.[1] ?? '';
 
 const SHOTS = [

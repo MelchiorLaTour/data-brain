@@ -38,7 +38,7 @@ NODE_DIR="$WORK/node-x/node-v$NODE_VERSION-darwin-arm64"
 TOP="$WORK/$NAME"
 PAYLOAD="$TOP/payload"
 mkdir -p "$PAYLOAD/bin" "$PAYLOAD/setup/mcp/hosts" "$PAYLOAD/setup/chatgpt" "$PAYLOAD/node/bin"
-cp "$ROOT/LICENSE" "$PAYLOAD/LICENSE"
+cp "$ROOT/../LICENSE" "$PAYLOAD/LICENSE"
 # Only the engine scripts the server calls, as in the Claude package: no corpus-derived dictionaries or other repository content.
 ENGINE_BIN_FILES=(
   build-fts.sh build-fts-fr.sh build-index.sh canon.sh extract.sh fts.sh index-add.sh ingest-root.sh inventory.sh look.sh
