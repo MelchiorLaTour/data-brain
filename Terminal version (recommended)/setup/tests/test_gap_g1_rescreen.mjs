@@ -46,7 +46,7 @@ try {
   await initialize(server);
   const before = await fs.stat(path.join(docs, 'school-portal.md'));
   console.log(await server.tool('databrain_refresh'));
-  await until(async () => (await state()).privacyRulesVersion === '0.1.38' && !(await rows()).includes('school-portal.md'), 'the unchanged note was re-screened and pulled', 120000);
+  await until(async () => (await state()).privacyRulesVersion === '0.2.1-part40' && !(await rows()).includes('school-portal.md'), 'the unchanged note was re-screened and pulled', 120000);
   await until(async () => { const t = await server.tool('databrain_setup_status'); return /Stage: ready\./.test(t) && !/Running now/.test(t); }, 'the refresh job finished', 180000);
   const after = await fs.stat(path.join(docs, 'school-portal.md'));
   assert.equal(before.mtimeMs, after.mtimeMs, 'the note itself was not touched');

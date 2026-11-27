@@ -22,6 +22,14 @@ const configs = {
 };
 const results = [];
 try {
+  // Part 41: Codex in Terminal reads the same config.toml, so the text must scope itself and never override the user.
+  assert.match(ruleText, /^These rules apply only when this session has DataBrain tools/, 'the block must scope itself to sessions that have DataBrain tools');
+  assert.match(ruleText, /If it has none, as in the Codex terminal, ignore this block/, 'without DataBrain tools (Codex terminal) the block must not apply');
+  assert.match(ruleText, /only when a DataBrain tool result says a file is held as private, and only for that file/, 'the private line is only for a held DataBrain result');
+  assert.match(ruleText, /Never use it to refuse a file the user names by its path/, 'the private line must never refuse a file the user points at');
+  assert.match(ruleText, /never to answer a question about DataBrain itself, such as which DataBrain is running/, 'questions about DataBrain itself get a straight answer');
+  assert.doesNotMatch(ruleText, /If DataBrain reports private files, reply only/, 'the old unscoped refusal wording is gone');
+  assert.doesNotMatch(ruleText, /Never use Computer Use or your own file tools to open the user's personal files/, 'the old blanket ban that overrode the user is gone');
   for (const [name, text] of Object.entries(configs)) {
     const file = path.join(temp, `${name}.toml`);
     fs.writeFileSync(file, text);
@@ -65,6 +73,8 @@ try {
   assert.equal(run('write', old).status, 0);
   const updated = fs.readFileSync(old, 'utf8');
   assert.equal(updated.split(START).length - 1, 1, 'older block replaced, not duplicated');
+  assert.doesNotMatch(updated, /old text/, 'the older text is gone after the update');
+  assert(fs.readdirSync(temp).some(f => f.startsWith('old.toml.databrain-backup-')), 'replacing an older block keeps a backup');
   assert.equal(tomlParses(old).stdout.trim(), ruleText);
   // no config file: created with only the block
   const none = path.join(temp, 'sub', 'none.toml');

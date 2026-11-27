@@ -92,7 +92,7 @@ try {
   const refreshStartedByHealth = /Running now/.test(statusAfter1) || (await state()).indexJob?.status === 'running';
   console.log('G3 health call 1 started a refresh by itself:', refreshStartedByHealth);
   console.log(await server.tool('databrain_refresh'));
-  await until(async () => (await state()).privacyRulesVersion === '0.1.38', 'rules version recorded', 180000);
+  await until(async () => (await state()).privacyRulesVersion === '0.2.1-part40', 'rules version recorded', 180000);
   await idle(server);
   // privacy: pause for the held items? read the list and keep only the control item
   if (process.env.DBG) console.log('NEW PHASE .databrain:', (await fs.readdir(path.join(dataHome, '.databrain'))).join(' '));

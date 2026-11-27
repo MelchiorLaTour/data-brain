@@ -34,7 +34,7 @@ try {
   assert(!first.includes('re-checking'), `a new brain does not say "re-checking":\n${first}`);
   assert(first.includes('plan.md'), `the first question finds the note:\n${first}`);
   const state = JSON.parse(await fs.readFile(statePath, 'utf8'));
-  assert.equal(state.privacyRulesVersion, '0.1.38', 'the first build recorded the privacy rules version');
+  assert.equal(state.privacyRulesVersion, '0.2.1-part40', 'the first build recorded the privacy rules version');
   console.log('PASS new brain first answer');
 } finally {
   child.kill('SIGTERM'); await sleep(500);

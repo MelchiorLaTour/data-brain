@@ -118,6 +118,87 @@ sub nir_ok {
 # Part 16: the lists behind the "several signs together" rule (accent-folded, lower case, matched as whole words).
 our $STATEMENT_WORDS = join '|', 'statements?', 'checking', 'savings', 'balances?', 'deposits?', 'withdrawals?', 'debits?', 'overdrafts?', 'transactions?', 'routing', 'releves?', 'solde', 'virements?', 'decouverts?', 'prelevements?';
 our $BANK_NAMES = join '|', 'chase', 'jpmorgan', 'bank of america', 'wells fargo', 'citibank', 'capital one', 'us bank', 'u\.s\. bank', 'pnc', 'td bank', 'hsbc', 'barclays', 'lloyds', 'natwest', 'monzo', 'santander', 'revolut', 'n26', 'ally bank', 'discover bank', 'charles schwab', 'bnp', 'bnp paribas', 'societe generale', 'credit agricole', 'credit mutuel', 'caisse d epargne', 'la banque postale', 'lcl', 'boursorama', 'deutsche bank', 'credit suisse', 'ubs';
+# Part 40: IBANs printed as examples (ECBS, Wikipedia, bank and textbook pages). They pass the checksum but are nobody's account. Skipped only beside an
+# example word (content_reason_window): tests and notes that use them as stand-ins for a real account are still held.
+our %EXAMPLE_IBAN = map { $_ => 1 } qw(GB82WEST12345698765432 GB29NWBK60161331926819 GB33BUKB20201555555555 DE89370400440532013000 FR1420041010050500013M02606 FR7630006000011234567890189 FR7612345987650123456789014 NL91ABNA0417164300 BE68539007547034 BE71096123456769 CH9300762011623852957 CH5604835012345678009 ES9121000418450200051332 ES7921000813610123456789 IT60X0542811101000000123456 AT611904300234573201 LU280019400644750000 IE29AIBK93115212345678 PT50000201231234567890154 MC5811222000010123456789030);
+
+# Part 40: what follows a password label. All input is folded (lower case, no accents).
+# Words that only talk ABOUT a password ("the password is required", "mot de passe : obligatoire").
+our $NOT_A_VALUE = qr/(?:required|too|not|invalid|incorrect|wrong|stored|hashed|encrypted|case|sensitive|expired|changed|reset|saved|set|used|a|an|the|your|my|empty|blank|missing|valid|weak|strong|long|short|secure|safe|private|hidden|shown|visible|obligatoire|trop|invalide|incorrect|faux|stocke|chiffre|expire|change|vide|un|une|le|la|votre|mon|ma)/;
+sub trim_value { my ($v) = @_; $v =~ s/[.,;:!?)\]}"'`]+\z//; $v =~ s/\A["'`(\[{]+//; return $v; }
+# A value written by a program or a template, not a secret: input(...), getpass.getpass(), os.environ[...], form["password"], self.password,
+# None, str, <your password>, ${DB_PASSWORD}, $PASS, %s, ****, ____, your_password, hashed_password, a path.
+sub code_value {
+  my ($v) = @_;
+  return 1 if $v =~ /\A[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*[(\[]/;
+  return 1 if $v =~ /\A(?:self|this|args|kwargs|opts|options|params|request|req|form|config|cfg|settings|conf|os|env|environ|session|app|db|user|data|st|creds|credentials|secrets)\.[a-z_]/;
+  return 1 if $v =~ /\A(?:none|null|nil|true|false|str|string|int|bool|undefined)[,;)]*\z/;
+  return 1 if $v =~ /\A["'`]?(?:<|\{|\$\{|\$[a-z_]|%\(?[a-z_]*\)?s|\*{3,}|x{4,}|\.{3,}|_{2,})/;
+  return 1 if $v =~ /\A["'`]?(?:your|votre)[ _-]?[a-z_]*["'`]?[,;)]*\z/;
+  return 1 if $v =~ /\A[a-z]+_[a-z0-9_]*[,;)]*\z/ && $v =~ /pass|pwd|mdp|login|user|code|hash|secret|token|key|input/;
+  return 1 if $v =~ m{\A~?\.{0,2}/};
+  return 0;
+}
+# A value followed by more words on the same line counts only when it looks like a secret by itself: 4+ characters with a digit ("hunter2 (changed
+# in May)"), not an ordinary word ("given in class", "ask at the front desk").
+sub secret_like { my ($v) = @_; $v = trim_value($v); return length($v) >= 4 && $v =~ /\d/; }
+my $STRICT_LABEL = qr/(?:password|passcode|passwd|mot de passe|mdp|pw|pwd|code secret|code d acces|code wifi|wifi code|code (?:de (?:la )?)?carte cadeau)/;   # Part 43: a gift card code is a secret
+my $WIDE_LABEL = qr/(?:temporary pass(?:word)?|temp pass(?:word)?|pass|pin|code|login|username|identifiant|user ?id)/;
+# Codes that are not secrets: "zip code: 90210", "course code: FIN2034", "promo code: SPRING24", "status code = 200".
+my $NOT_SECRET_CODE = qr/(?:zip|postal|post|area|country|dialing|dialling|status|error|exit|return|response|http|source|promo|promotional|discount|coupon|voucher|referral|dress|colou?r|course|module|class|subject|unit|program|programme|product|item|article|sku|bar|qr|iso|language|currency|airport|flight|booking|reservation|tracking|room|building|sample|example|starter|naf|ape|siret|insee|ean|upc|hs|zone|region|department|level|grade|python|sql|java|html|css|javascript)/;
+# Part 43: words that start an instruction or a sentence, not a password ("Password: choose one you will remember", "Mot de passe : voir avec ...").
+our $NOT_A_WORD_VALUE = qr/(?:choose|chose|pick|enter|type|use|see|voir|ask|demander|demandez|create|set|change|reset|update|keep|write|remember|follow|choisir|choisissez|saisir|saisissez|entrer|entrez|creer|creez|definir|definissez|modifier|modifiez|changer|changez|indiquer|indiquez|renseigner|renseignez|taper|tapez|utiliser|utilisez|garder|gardez|retenir|given|donne|fourni|provided|sent|envoye|same|meme|identique|celui|celle|ceux|on|in|at|via|from|by|for|with|de|du|des|par|sur|sous|dans|en|au|aux|avec|pour|comme|like|as|is|are|was|be|will|must|should|can|doit|sera|then|puis|and|et|or|ou|if|si|no|non|pas|any|all|tous|this|that|ce|cette|it|il|elle|needed|none|nothing|rien)/;
+# Part 43: names of programming languages and tools ("Code: Python"), never a password.
+our $TOOL_WORD = qr/(?:python|r|sql|java|javascript|js|typescript|stata|matlab|julia|rust|go|golang|c|cpp|html|css|pytorch|tensorflow|excel|vba|sas|spss|php|ruby|swift|kotlin|scala|bash|shell|latex|markdown|pandas|numpy)/;
+sub password_on_line {
+  my ($line) = @_;
+  # strict labels, also as the end of a name in a settings file (db_password=..., mysql_pwd=...)
+  while ($line =~ /(?:\b|(?<=_))$STRICT_LABEL[ \t]*[:=][ \t]*([^\s]*[a-z0-9]\S*)/g) {
+    my ($value, $rest) = ($1, substr($line, $+[1]));
+    my $label_starts_line = substr($line, 0, $-[0]) =~ /\A[ \t\-*\x{2022}#>|]*\z/;
+    next if code_value($value);
+    my $t = trim_value($value);
+    next if $t !~ /[a-z0-9]/;
+    if ($rest =~ /[a-z0-9]/ && $rest !~ /\A[ \t]*[(\[\/|,;\x{2013}\x{2014}-]/) {   # more words follow: prose, unless a note like "(changed in May)"
+      # Part 43: or the label starts the line and one plain word comes before a short note of at most 4 words ("Password: sunshine for the home wifi")
+      my $short_note = $label_starts_line && $t =~ /\A[a-z]{3,}\z/ && $t !~ /\A(?:$NOT_A_VALUE|$NOT_A_WORD_VALUE)\z/ && (() = $rest =~ /\S+/g) <= 4;
+      next unless secret_like($t) || $short_note;
+    }
+    next if $t =~ /\A$NOT_A_VALUE\z/;
+    return 'contains a password';
+  }
+  while ($line =~ /\b(?:password|passcode|passwd|mot de passe|mdp|code wifi|wifi code)[ \t]+(?:is|est|-)[ \t]+(\S*\d\S*)/g) {
+    my ($value, $rest) = ($1, substr($line, $+[1]));
+    next if $rest =~ /[a-z0-9]/ && !secret_like($value);
+    return 'contains a password';
+  }
+  return 'contains a password' if $line =~ /\b(?:code wifi|wifi code)[ \t]+\S*\d\S*/ || $line =~ /\bpin[ \t]+\d{4,8}\b/;
+  # short account labels: not inside a link (?code=, &pass=), not part of a name (obj.code, my_code), value last on the line
+  while ($line =~ /(?<![?&.\/_(,-])\b($WIDE_LABEL)(?:[ \t]*([:=])|[ \t]+(is|est)(?=[ \t]))[ \t]*([^\s]*[a-z0-9]\S*)/g) {
+    my ($label, $sep, $value) = ($1, $2 // $3, $4);
+    my ($before, $rest) = (substr($line, 0, $-[1]), substr($line, $+[4]));
+    next if $sep =~ /\A(?:is|est)\z/ && $value !~ /\d/;
+    next if code_value($value) || $rest =~ /[a-z0-9]/;
+    my $t = trim_value($value);
+    next if $t =~ /\A$NOT_A_VALUE\z/ || $t =~ m{\A\d+(?:[.,]\d+)?[ \t]*%\z|\A\d+[.,]\d+\z|\A\d+[ \t]*/[ \t]*\d+\z};   # 12.5, 85%, a grade 10/20
+    if ($label eq 'pin') { next unless $t =~ /\A\d{4,8}\z/; }
+    elsif ($label =~ /\A(?:pass|code|temporary pass(?:word)?|temp pass(?:word)?)\z/) {
+      next unless $t =~ /\d/;
+      next if $label eq 'code' && $before =~ /\b$NOT_SECRET_CODE[ \t]*\z/;
+    }
+    return 'contains a password';
+  }
+  return '';
+}
+
+# Part 43: a personal address (not a school, university or public body). Login notes are written next to these; school files list .edu addresses.
+sub personal_email {
+  my ($line) = @_;
+  while ($line =~ /[a-z0-9._%+-]+@([a-z0-9.-]+\.[a-z]{2,})/g) {
+    return 1 unless $1 =~ /\.edu\b|\.ac\.[a-z]+|\.gouv\.fr|\.gov\b|univ|ecole|school|college|(?:\A|[.-])(?:edhec|essec|hec|insead|sciencespo)[.-]/;
+  }
+  return 0;
+}
 
 sub content_reason {
   my ($text) = @_;
@@ -133,7 +214,11 @@ sub content_reason_window {
   my ($text) = @_;
   return 'contains a private key' if $text =~ /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----/;
   while ($text =~ /\b([A-Za-z]{2}\d{2}(?:[ ]?[A-Za-z0-9]{4}){2,7}(?:[ ]?[A-Za-z0-9]{1,4})?)\b/g) {
-    return 'contains an IBAN' if iban_ok($1);
+    my ($found, $from, $to) = ($1, $-[1], $+[1]);
+    (my $iban = uc $found) =~ s/\s+//g;
+    # Part 40: a published example IBAN with "example" (or "exemple", "e.g.", "format", "sample", "fake", "test") within 120 characters is an example, not an account
+    if ($EXAMPLE_IBAN{$iban}) { next if substr($text, $from > 120 ? $from - 120 : 0, ($from > 120 ? 120 : $from) + ($to - $from) + 120) =~ /\b(?:examples?|exemples?|e\.g\.|format|samples?|specimen|fictive?|fictif|fictitious|dummy|fake|faux|placeholder|invented|invente|tests?|testing|par exemple|for instance)\b/i; }
+    return 'contains an IBAN' if iban_ok($found);
   }
   # A card is held only when it has a real card layout (Visa, Mastercard, Amex, Discover), passes Luhn, AND a card word sits within
   # about 80 characters. Long digit tables pass Luhn by chance one time in ten; without the card word they are just data.
@@ -148,22 +233,28 @@ sub content_reason_window {
     return 'contains a French social security number' if nir_ok($1);
   }
   my $f = fold($text);
-  # a password-style label followed by a value on the same line: "password: x", "mot de passe = x", "password is x1", "code wifi 12345678".
-  # A note that only talks about passwords has no value after the label and is not held.
-  my $label = qr/(?:password|passcode|passwd|mot de passe|mdp|code wifi|wifi code)/;
-  # Short account labels count too: "pass: x", "pwd = x", "login: x", "username: x", "identifiant: x", "user id: x", "pin: 4821", "code: x", "temporary pass: x".
-  my $wide = qr/(?:pass|pwd|pin|code|login|username|identifiant|user ?id|temporary pass(?:word)?|temp pass(?:word)?)/;
   my @lines = split /\n/, $f;
+  # A password label followed by a value on the same line: "password: x", "mot de passe = x", "password is x1", "code wifi 12345678", and the short
+  # account labels "pass: x", "pwd = x", "login: x", "username: x", "identifiant: x", "user id: x", "pin: 4821", "code: 4821", "temporary pass: x".
+  # Part 40: the value must look like a secret. On a real brain 59 of 62 such holds were school and work files: "code: python", "first pass: read
+  # the abstract", "zip code: 90210", "?code=" in a link, password = input(...) in a notebook, "exam password: given in class", an email beside a
+  # student number. Each of those shapes is left out below, by name (password_on_line, code_value, the email + token pair).
   for my $line (@lines) {
-    return 'contains a password' if $line =~ /\b$label[ \t]*[:=][ \t]*[^\s]*[a-z0-9]\S*/
-      || $line =~ /\b$label[ \t]+(?:is|est|-)[ \t]+\S*\d\S*/
-      || $line =~ /\b(?:code wifi|wifi code)[ \t]+\S*\d\S*/
-      || $line =~ /\b$wide[ \t]*[:=][ \t]*[^\s]*[a-z0-9]\S*/
-      || $line =~ /\b$wide[ \t]+(?:is|est)[ \t]+\S*\d\S*/
-      || $line =~ /\bpin[ \t]+\d{4,8}\b/;
+    my $why = password_on_line($line);
+    return $why if $why;
+  }
+  # Part 43: a one-word code or pass alone on its line, right next to a personal email line, is a login pair written without the word "password"
+  # ("Email: sample.user@gmail.com" then "Pass: sunshine"). Tool names ("Code: Python") and school addresses are left out.
+  for my $i (0 .. $#lines) {
+    next unless $lines[$i] =~ /\A[ \t\-*\x{2022}]*(?:code|pass)[ \t]*[:=][ \t]*([a-z]{3,})[ \t.]*\z/;
+    next if $1 =~ /\A(?:$NOT_A_VALUE|$NOT_A_WORD_VALUE|$TOOL_WORD)\z/;
+    return 'contains a password' if ($i > 0 && personal_email($lines[$i - 1])) || ($i < $#lines && personal_email($lines[$i + 1]));
   }
   # An email address with a short letters-and-digits token (like "c014d1") within 3 lines is a login pair: held. Wide on purpose, so order
   # numbers or ticket codes next to an email are held too (a held file can be released by the user).
+  # Part 40: three shapes are not a login pair: a link or path (linkedin.com/in/jane-roe-4b2a91), a line longer than 120 characters (code or
+  # data), and a number with a short prefix (student number s20231045, matricule e21904577). In a sentence of 4+ words only a mixed token such as
+  # c014d1 counts, not covid19 or python3.
   for my $i (0 .. $#lines) {
     (my $bare = $lines[$i]) =~ s/\bhttps?:\/\/\S+//g;
     next unless $bare =~ /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/;
@@ -171,21 +262,52 @@ sub content_reason_window {
     for my $j ($lo .. $hi) {
       (my $other = $lines[$j]) =~ s/\bhttps?:\/\/\S+//g;
       $other =~ s/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/ /g;
-      return 'contains a password' if $other =~ /(?<![a-z0-9])(?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{6,16}(?![a-z0-9])/;
+      $other =~ s{\S*/\S*}{ }g;
+      next if length($other) > 120;
+      my $prose = (() = $other =~ /[a-z]{2,}/g) >= 4;
+      while ($other =~ /(?<![a-z0-9])((?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{6,16})(?![a-z0-9])/g) {
+        my ($token, $start) = ($1, $-[1]);
+        if ($token =~ /\A[a-z]{0,3}\d{5,}\z/) {
+          # Part 43: an ID-shaped token still counts when it stands alone on its line, right next to a bare personal email line (the address and at
+          # most 2 other words), the way a login is noted: "sample.user@gmail.com" then "ab123456". Student lists use school addresses or labels.
+          (my $email_words = $bare) =~ s/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/ /g;
+          next unless abs($j - $i) == 1 && $other =~ /\A\W*\Q$token\E\W*\z/ && personal_email($bare) && (() = $email_words =~ /[a-z]{2,}/g) <= 2;
+        }
+        next if substr($other, 0, $start) =~ /\b(?:$NOT_SECRET_CODE|student|etudiant|matricule|numero)\b[^a-z0-9]{0,3}(?:code|id|number|no|numero)?[^a-z0-9]{0,3}\z/;   # Part 40: "Course code: CF3101", "Student ID s2023104"
+        next if $prose && $token !~ /[a-z]\d+[a-z]|\d[a-z]+\d/;
+        return 'contains a password';
+      }
     }
   }
   # Part 16b: secrets that must never reach a model. Each rule below holds the file on its own (the file is held for the user's review, never
   # excluded automatically). $f is lower case with accents removed. Labels are English and French.
   # 1. a password-like word followed by "is"/"was"/"est" and a value ("the wifi password is sunshine"), unless the next word only talks ABOUT passwords
-  if ($f =~ /\b(?:password|passcode|passphrase|pass phrase|passwd|pw|pwd|pin|mot de passe|mdp|code pin|mot de passe wifi|cle wifi)[ \t]+(?:is|was|est|etait|=)[ \t]+(\S+)/) {
-    my $word = $1; $word =~ s/[^a-z0-9]+$//;
-    return 'contains a password' unless $word =~ /\A(?:required|too|not|invalid|incorrect|wrong|stored|hashed|encrypted|case|sensitive|expired|changed|reset|saved|set|used|a|an|the|your|my|empty|blank|missing|valid|weak|strong|long|short|secure|safe|private|hidden|shown|visible|obligatoire|trop|invalide|incorrect|faux|stocke|chiffre|expire|change|vide|un|une|le|la|votre|mon|ma)\z/;
+  #    (Part 40: every such phrase is checked, not only the first; a value followed by more words must look like a secret, so "the password is 8
+  #    characters long" is not held)
+  while ($f =~ /\b(?:password|passcode|passphrase|pass phrase|passwd|pw|pwd|pin|mot de passe|mdp|code pin|mot de passe wifi|cle wifi)[ \t]+(?:is|was|est|etait|=)[ \t]+(\S+)([^\n]*)/g) {
+    my ($value, $rest) = ($1, $2);
+    (my $word = $value) =~ s/[^a-z0-9]+$//;
+    next if $word =~ /\A$NOT_A_VALUE\z/ || code_value($value);
+    next if $rest =~ /[a-z0-9]/ && !secret_like($value);
+    return 'contains a password';
   }
-  # 2. short and long password labels with a value: pw, passphrase, secret, api key, token, client secret, access key ... (value of 6+ characters, no spaces
-  #    needed for a key; a passphrase may be several words)
+  # 2. passphrase labels with a value (a passphrase may be several words); token and key labels
   for my $line (@lines) {
-    return 'contains a password' if $line =~ /\b(?:pw|pwd|passphrase|pass phrase|passcode|passwd|mot de passe|mdp|phrase secrete|phrase de passe|code secret|code d acces)[ \t]*[:=][ \t]*\S{3,}/;
-    return 'contains an access key or token' if $line =~ /\b(?:api[ _-]?key|apikey|api[ _-]?secret|secret[ _-]?key|client[ _-]?secret|access[ _-]?key|access[ _-]?token|auth[ _-]?token|refresh[ _-]?token|bearer[ _-]?token|private[ _-]?token|token|cle api|cle secrete|jeton)[ \t]*[:=][ \t]*["']?[a-z0-9_\-\.\/+=]{8,}/;
+    while ($line =~ /\b(?:passphrase|pass phrase|phrase secrete|phrase de passe)[ \t]*[:=][ \t]*(\S{3,})/g) {
+      my $value = $1;
+      next if code_value($value) || trim_value($value) =~ /\A$NOT_A_VALUE\z/;
+      return 'contains a password';
+    }
+    # Part 40: a key read by the program (token = os.getenv("API_TOKEN"), api_key = os.environ["API_KEY"]) is not a key
+    while ($line =~ /\b(?:api[ _-]?key|apikey|api[ _-]?secret|secret[ _-]?key|client[ _-]?secret|access[ _-]?key|access[ _-]?token|auth[ _-]?token|refresh[ _-]?token|bearer[ _-]?token|private[ _-]?token|token|cle api|cle secrete|jeton)[ \t]*[:=][ \t]*(["']?[a-z0-9_\-\.\/+=]{8,}\S*)/g) { return 'contains an access key or token' unless code_value($1); }
+    # Part 43b: a key or secret whose label ENDS a longer name, as in env files, ini files, JSON and connection strings (AWS_SECRET_ACCESS_KEY=...,
+    # MY_APP_SECRET=..., GITHUB_TOKEN=..., "client_secret": "...", "private_key_id": "...", AccountKey=..., sas_token: ..., cle_api = ...), with a value
+    # of 20+ characters that mixes letters and digits. Not a value read by the program or a placeholder (code_value), not a link parameter (?x_token=).
+    while ($line =~ /(?:\b|(?<=_))(?:[a-z0-9]+[_-])*(?:secret|token|api[_-]?key|access[_-]?key|secret[_-]?key|account[_-]?key|accountkey|private[_-]?key(?:[_-]?id)?|sas[_-]?token|cle[ _]secrete|cle[ _]api)["']?[ \t]*[:=][ \t]*["']?([a-z0-9+\/=_\-.]{20,})/g) {
+      my ($value, $start) = ($1, $-[0]);
+      next if substr($line, 0, $start) =~ /[?&][a-z0-9_-]*\z/ || code_value($value);
+      return 'contains an access key or token' if $value =~ /[a-z]/ && $value =~ /\d/;
+    }
   }
   # 3. well-known token shapes, with or without a label (matched on the original text, case kept)
   return 'contains an access key or token'
@@ -222,10 +344,18 @@ sub content_reason_window {
   {
     my $signs = 0;
     $signs++ if $f =~ /(?:x{3,}|\*{3,}|\x{2022}{3,})\s?\d{4}\b/;   # a masked ending (xxxx1234); a labelled account or routing number holds on its own (rule 7 above)
-    my %stmt; while ($f =~ /\b($STATEMENT_WORDS)\b/g) { (my $word = $1) =~ s/s$//; $stmt{$word} = 1; }   # statement and statements are one word
-    my $banks = () = $f =~ /\b(?:$BANK_NAMES)\b/g;
-    $signs++ if $banks >= 1 && keys(%stmt) >= 2;
-    $signs++ if $banks >= 2 && keys(%stmt) >= 4;
+    # Part 40: the bank names and statement words must sit together, within 20000 characters (windows overlap by 5000). A book or dataset that names a
+    # bank in chapter one and "balance" in its glossary is not a statement; a real statement or a keyword file made from one is far shorter.
+    my ($bank_sign, $strong_sign) = (0, 0);
+    for (my $at = 0; $at == 0 || $at < length($f); $at += 15000) {
+      my $part = substr($f, $at, 20000);
+      my %stmt; while ($part =~ /\b($STATEMENT_WORDS)\b/g) { (my $word = $1) =~ s/s$//; $stmt{$word} = 1; }   # statement and statements are one word
+      my $banks = () = $part =~ /\b(?:$BANK_NAMES)\b/g;
+      $bank_sign = 1 if $banks >= 1 && keys(%stmt) >= 2;
+      $strong_sign = 1 if $banks >= 2 && keys(%stmt) >= 4;
+      last if $strong_sign;
+    }
+    $signs += $bank_sign + $strong_sign;
     $signs++ if $f =~ /\b(?:user ?name|login|e-?mail|identifiant|user ?id)\s*[:=]/ && $f =~ /\b(?:password|passcode|passwd|mot de passe)\s*[:=]/;
     return 'looks like a bank statement or login details (several signs together)' if $signs >= 2;
   }
@@ -350,6 +480,30 @@ if ($mode eq 'names') {
     unlink $tmp if defined $tmp;
     die $err;
   }
+} elsif ($mode eq 'release-content-holds') {
+  # Part 40: the content rules changed. Every path whose last line is `held` for its TEXT (a reason that starts "contains" or "looks like") is dropped
+  # from the held list, so the next refresh screens it again with the current rules. Name and folder holds and the user's own decisions stay.
+  exit 0 unless $PRIV && -e $PRIV;
+  my @st = stat($PRIV) or die "privacy: cannot stat $PRIV: $!\n";
+  my %release = map { $_ => 1 } grep { $status{$_} eq 'held' && $reason{$_} =~ /\A(?:contains |looks like )/ } keys %status;
+  exit 0 unless %release;
+  open(my $in, '<:utf8', $PRIV) or die "privacy: cannot read $PRIV: $!\n";
+  my ($out, $tmp) = tempfile('privacy.tsv.XXXXXXXX', DIR => dirname($PRIV), UNLINK => 0);
+  my $ok = eval {
+    chmod($st[2] & 07777, $tmp) or die "privacy: cannot set permissions on $tmp: $!\n";
+    binmode($out, ':utf8') or die "privacy: cannot write $tmp: $!\n";
+    while (defined(my $line = <$in>)) {
+      my (undef, $p) = split /\t/, $line, 3;
+      next if defined $p && $release{$p};
+      print {$out} $line or die "privacy: cannot write $tmp: $!\n";
+    }
+    close $out or die "privacy: cannot close $tmp: $!\n";
+    rename $tmp, $PRIV or die "privacy: cannot replace $PRIV: $!\n";
+    1;
+  };
+  close $in;
+  if (!$ok) { unlink $tmp; die $@ || "privacy: failed to update $PRIV\n"; }
+  print scalar(keys %release), "\n";
 } else {
-  die "usage: privacy.pl names|filter|content <path>|prune-index <tsv>\n";
+  die "usage: privacy.pl names|filter|content <path>|prune-index <tsv>|release-content-holds\n";
 }

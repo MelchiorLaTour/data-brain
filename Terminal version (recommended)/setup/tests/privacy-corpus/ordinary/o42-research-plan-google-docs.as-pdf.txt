@@ -1,0 +1,5 @@
+Research plan (shared Google Doc)
+Owner: carol.nguyen@example.edu
+Status: draft 2
+Code: Stata, with replication files in the appendix.
+Pass: the supervisor reads the plan next week.

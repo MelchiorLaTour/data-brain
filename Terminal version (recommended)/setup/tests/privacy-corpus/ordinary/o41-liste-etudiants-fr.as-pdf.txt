@@ -1,0 +1,4 @@
+Liste des étudiants – groupe TD 3
+Dupont Léa – lea.dupont@example.fr – e21904577
+Bernard Hugo – hugo.bernard@example.fr – e21904612
+Moreau Inès – ines.moreau@example.fr – e21904633
