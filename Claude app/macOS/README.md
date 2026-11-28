@@ -44,7 +44,7 @@ That's all. You can delete the downloaded file now. It is in your **Downloads** 
 
 To remove DataBrain: **Claude → Settings… → Extensions**, then on the **DataBrain** row click the **⋯** button (to the right of **Configure**) and click **Uninstall** (red). Your own files are never touched. DataBrain's folder stays on your Mac, in your home folder (**Finder → Go → Home**), named **DataBrain**, or **DataBrain 2** and so on. It holds copies of the text DataBrain read, so drag it to the Trash if you want that gone. Same steps with copy buttons: [app guide](databrain-app-guide.html).
 
-Files kept in iCloud, OneDrive, Google Drive and Dropbox have not been tested yet. The terminal route for Claude Code is in [INSTALL.md](../Terminal%20version%20%28recommended%29/INSTALL.md); test status is in the [acceptance ledger](../Terminal%20version%20%28recommended%29/setup/ACCEPTANCE.md).
+Files kept in iCloud, OneDrive, Google Drive and Dropbox have not been tested yet. The terminal route for Claude Code is in [INSTALL.md](../../Terminal%20version%20%28recommended%29/macOS/INSTALL.md); test status is in the [acceptance ledger](../../Terminal%20version%20%28recommended%29/macOS/setup/ACCEPTANCE.md).
 
 ## If DataBrain stops working
 

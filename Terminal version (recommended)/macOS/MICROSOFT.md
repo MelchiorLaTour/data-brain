@@ -5,7 +5,7 @@
 Support **Windows through WSL 2 first**. Data Brain is a local Bash, ripgrep,
 and SQLite CLI application; WSL preserves that contract without a second
 PowerShell implementation. The WSL installer and launcher are in
-[`windows/`](windows/README.md); the `bin/` engine is shared with macOS.
+[`../Windows/`](../Windows/README.md); the `bin/` engine is shared with macOS.
 
 SQLite is not a server and needs no special database download. Install the
 standard `sqlite3` command-line package inside the chosen WSL distribution,
@@ -17,12 +17,12 @@ PDF text is not indexed.
 On Linux, `bin/compat.sh` puts `bin/compat/` first on PATH so the BSD `stat`,
 `date` and `shasum` forms in `bin/` work unchanged; macOS never loads them.
 `setup/tests/test_linux_compat.sh` checks them against GNU coreutils.
-`windows/data-brain-wsl.sh` remains as a convenience entry point. A native
+`../Windows/data-brain-wsl.sh` remains as a convenience entry point. A native
 PowerShell port remains a separate project.
 
 ## Acceptance
 
-`windows/install-wsl.sh`, `windows/data-brain-wsl.sh verify`, ranked search,
+`../Windows/install-wsl.sh`, `../Windows/data-brain-wsl.sh verify`, ranked search,
 and the Windows compatibility tests must pass without accessing files outside
 configured canonical roots.
 

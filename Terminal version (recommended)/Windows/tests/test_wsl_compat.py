@@ -1,4 +1,4 @@
-"""Exercise the unmodified Data Brain scripts through the WSL compatibility layer."""
+"""Run the shared engine scripts on Linux (as on Windows WSL 2): bin/compat.sh must load by itself."""
 import os
 from pathlib import Path
 import shutil
@@ -7,11 +7,11 @@ import tempfile
 import unittest
 
 
-SOURCE = Path(__file__).resolve().parents[2]
+SOURCE = Path(__file__).resolve().parents[2] / "macOS"  # the shared engine
 
 
 class WslCompatibilityTests(unittest.TestCase):
-    def test_original_index_and_fts_scripts_run_with_windows_shims(self):
+    def test_index_fts_and_recent_run_directly_on_linux(self):
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
             checkout = temporary_root / "data-brain"
@@ -25,7 +25,7 @@ class WslCompatibilityTests(unittest.TestCase):
             shutil.copytree(SOURCE, checkout, ignore=shutil.ignore_patterns(".git", "moc"))
             canon = checkout / "bin" / "canon.sh"
             canon.write_text(canon.read_text(encoding="utf-8").replace('$HOME/Notes', str(canonical_notes)), encoding="utf-8")
-            environment = os.environ | {"PATH": f"{checkout / 'windows' / 'shims'}:{os.environ['PATH']}"}
+            environment = dict(os.environ)  # no PATH tweak: scripts called directly, as Claude does
             for command in ("build-index.sh", "build-fts.sh"):
                 completed = subprocess.run(
                     ["bash", str(checkout / "bin" / command)], text=True, capture_output=True,
@@ -38,6 +38,13 @@ class WslCompatibilityTests(unittest.TestCase):
             )
             self.assertEqual(results.returncode, 0, results.stderr)
             self.assertIn("launch.md", results.stdout)
+            # recent.sh printed nothing on WSL before bin/compat (BSD stat -f / date -r).
+            recent = subprocess.run(
+                ["bash", str(checkout / "bin" / "recent.sh"), "5"], text=True,
+                capture_output=True, env=environment, check=False,
+            )
+            self.assertEqual(recent.returncode, 0, recent.stderr)
+            self.assertIn("launch.md", recent.stdout)
 
 
 if __name__ == "__main__":

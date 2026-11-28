@@ -14,4 +14,4 @@ Your files stay on your Mac. DataBrain has no cloud server and stores nothing of
 
 We recommend turning off "Improve the model for everyone" (ChatGPT → Settings… → Data controls). Consumer ChatGPT plans train on chats by default, and the passages DataBrain returns to answer you become part of your chat. DataBrain does not change this setting itself.
 
-Using Claude instead? Open the **Claude app (Mac)** folder next to this one.
+Using Claude instead? Open the **Claude app** folder next to this one.
