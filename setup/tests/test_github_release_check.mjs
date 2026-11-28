@@ -60,8 +60,24 @@ const cyclicAnnotatedTag = await checkGitHubRelease({ manifest, build, fetchImpl
 assert.equal(cyclicAnnotatedTag.state, 'FAIL');
 const oversizedAsset = await checkGitHubRelease({ manifest, build, fetchImpl: mockFetch({ record: 'x'.repeat(4097) }) });
 assert.equal(oversizedAsset.state, 'FAIL');
-const oversizedApi = await checkGitHubRelease({ manifest, build, fetchImpl: async () => new Response('x'.repeat(65537)) });
+const oversizedApi = await checkGitHubRelease({ manifest, build, fetchImpl: async () => new Response('x'.repeat(1048577)) });
 assert.equal(oversizedApi.state, 'FAIL');
+// Part 44: a real GitHub commit response carries file diffs (256 KB for the 0.2.1 tag commit) and a
+// release may carry long notes. The check must read the small git-object endpoint and still verify.
+const bigCommitPage = JSON.stringify({ sha: build.engine_revision, files: [{ patch: 'p'.repeat(300000) }] });
+const largeRelease = await checkGitHubRelease({
+  manifest,
+  build,
+  fetchImpl: async url => {
+    if (url.endsWith('/releases/tags/v0.1.0')) return new Response(JSON.stringify({ tag_name: 'v0.1.0', draft: false, body: 'n'.repeat(200000), assets: assets.map(asset => ({ ...asset, uploader: { login: 'u', bio: 'b'.repeat(2000) } })) }));
+    if (url.endsWith(`/git/commits/${build.engine_revision}`)) return new Response(JSON.stringify({ sha: build.engine_revision, tree: { sha: 'f'.repeat(40) } }));
+    if (url.endsWith(`/commits/${build.engine_revision}`)) return new Response(bigCommitPage);
+    if (url.endsWith('/git/ref/tags/v0.1.0')) return new Response(JSON.stringify({ object: { sha: build.engine_revision, type: 'commit' } }));
+    if (url === releaseUrl) return new Response(info);
+    throw new Error(`Unexpected release URL: ${url}`);
+  },
+});
+assert.equal(largeRelease.state, 'PASS', largeRelease.detail);
 const unsafe = await checkGitHubRelease({ manifest, build, fetchImpl: mockFetch({ assetUrl: 'https://example.invalid/buildinfo.txt' }) });
 assert.equal(unsafe.state, 'FAIL');
 const redirect = await checkGitHubRelease({

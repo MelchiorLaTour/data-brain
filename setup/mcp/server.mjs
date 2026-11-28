@@ -1445,6 +1445,10 @@ async function reapproveFolder(input, state) {
 }
 
 async function repairBrain(args) {
+  // Part 44: repair asked while the post-update re-check runs (Mel, 2026-11-27: a 22-minute repair turn for work that finished by itself) starts nothing.
+  if (chatgptMode && args.reapprove === undefined && await privacyRecheckRunning()) {
+    return 'Nothing was changed. DataBrain is re-checking files after an update; that work is running and finishes by itself, so no repair is needed. Searches answer meanwhile with files that passed the updated privacy rules.';
+  }
   const redact = text => String(text).split(os.homedir()).join('~');
   const waitMs = Number(process.env.DATABRAIN_TEST_REPAIR_WAIT_MS) || 40000;
   const deadline = Date.now() + waitMs;
@@ -5467,9 +5471,14 @@ async function checkFreshnessAndRefresh(wait = false) {
 }
 
 // `known` is the freshness result the caller has just computed; a job that had to wait for the lock looks again (the other client may have done the work).
-function startAutoRefresh(roots, known = null, privacyRecheck = false) {
+// `heldLock`: a lock holder whose index-worker lock the caller already took (the privacy re-check claims it before it makes a job).
+function startAutoRefresh(roots, known = null, privacyRecheck = false, heldLock = null) {
+  const handedLock = heldLock?.lockChild || null;   // taken over now, before the caller's own cleanup runs
+  if (heldLock) heldLock.lockChild = null;
   return startJob('refresh', async current => {
-    const waited = await acquireLockWaiting(current, 'index-worker-lock.sqlite', current, 'Waiting for another DataBrain client to finish indexing; this refresh starts by itself afterwards.');
+    let waited = false;
+    if (handedLock) current.lockChild = handedLock;
+    else waited = await acquireLockWaiting(current, 'index-worker-lock.sqlite', current, 'Waiting for another DataBrain client to finish indexing; this refresh starts by itself afterwards.');
     try {
       // A privacy re-check always takes the full path (every note is screened and the full extract prunes the held ones), unless the client we waited for already did it.
       if (privacyRecheck) {
@@ -5717,6 +5726,7 @@ const PRIVACY_RULES_VERSION = '0.2.1-part40';
 // (the version is recorded only when the whole full refresh finished, so a failure keeps the gate closed). Until then search, read and the abstain
 // check answer with one plain sentence: not even a held note's name comes out. The re-check starts at server start, without waiting for a question.
 let privacyRecheckJob = null;
+let privacyRecheckClaiming = false;
 const PRIVACY_RECHECK_LINE = 'DataBrain is re-checking your files with its updated privacy rules, so it shows nothing for now. Try again in a minute; this happens once after an update. If it does not clear, call databrain_setup_status.';
 // 0.1.43: the gate holds at every stage from 'indexing' on (a manual refresh writes stage 'indexing', and 'taxonomy pending' and
 // 'relationships pending' come before 'ready'). Only the first build of a brand-new brain is exempt: it is screened at ingest by the current rules.
@@ -5735,14 +5745,55 @@ async function startPrivacyRecheckIfNeeded() {
     if (!['verification pending', 'ready'].includes((await readState()).stage)) return;
     if (privacyRecheckJob?.status === 'running' || Date.now() - lastAutoRefreshFailureAt < AUTO_REFRESH_RETRY_MS) return;
     if ([...activeJobs.values()].some(job => job.kind === 'refresh' && job.status === 'running')) return;
-    privacyRecheckJob = startAutoRefresh(await validateStoredRoots(await readState()), null, true);
+    // Part 44: ChatGPT opened 7 servers in 2.5 minutes after an update and each made its own re-check job. The lock is taken BEFORE a job
+    // exists: the one server that gets it does the re-check; the others make no job and answer while it runs (see privacyRecheckGate).
+    if (privacyRecheckClaiming) return;
+    privacyRecheckClaiming = true;
+    const claim = {};
+    try {
+      if (!(await acquireIndexWorkerLock(claim))) { logStage(null, 'recheck-attached', Date.now(), 'another DataBrain process holds the index lock; no re-check job here'); return; }
+      const latest = await readState();
+      if (latest.privacyRulesVersion === PRIVACY_RULES_VERSION) return;   // the server that held the lock before us already did it
+      privacyRecheckJob = startAutoRefresh(await validateStoredRoots(latest), null, true, claim);
+    } finally {
+      privacyRecheckClaiming = false;
+      if (claim.lockChild) await releaseIndexWorkerLock(claim);   // not handed to a job
+    }
   } catch {}
 }
 // '' when answering is safe; otherwise the sentence that replaces the answer.
 async function privacyRecheckGate() {
   if (!(await privacyRecheckPending())) return '';
   await startPrivacyRecheckIfNeeded();
+  if (chatgptMode) return '';   // Part 44: ChatGPT answers per file while the re-check runs (recheckServing); the Claude host keeps the closed gate
   return PRIVACY_RECHECK_LINE;
+}
+// Part 44 (ChatGPT): on Mel's brain the re-check took 571 s and every search came back empty, so he ran repair. While it runs, a search, an abstain
+// check and a read still answer, but only with what passes the CURRENT rules at the moment it is served: each hit's whole indexed text and excerpt
+// are screened by privacy.pl as it is now (name rules, earlier decisions, content rules), and a hit that is held, or whose screen cannot run, is left
+// out entirely. A read is always screened on the text it returns (readHitText). Files the update lets back in come when the re-check finishes.
+const RECHECK_UNCHECKED_LINE = 'DataBrain could not check one or more results against the updated privacy rules, so they are not shown.';
+const PRIVACY_RECHECK_FACT = 'DataBrain is re-checking files after an update. Every result shown here passed the updated privacy rules; files the update lets back in are added when the re-check finishes. No repair is needed.';
+async function recheckServing() {
+  return chatgptMode && await privacyRecheckPending();
+}
+// The re-check is running in this process or, holding the index lock, in another one.
+async function privacyRecheckRunning() {
+  if (privacyRecheckJob?.status === 'running') return true;
+  return (await privacyRecheckPending()) && lockHeldElsewhere('index-worker-lock.sqlite');
+}
+// The hits (paths) whose indexed text passes the current rules now; anything that cannot be screened is left out.
+async function passingCurrentRules(files) {
+  const passing = new Set();
+  let nameAllowed;
+  try { nameAllowed = await allowedByName(files); } catch { return passing; }
+  await inPool(files, async file => {
+    try {
+      const indexed = await indexedBodiesOfAsync(file);
+      if (indexed && (await screenTextAsync(file, indexed, nameAllowed)).ok) passing.add(file);
+    } catch {}
+  });
+  return passing;
 }
 async function rescreenChangedNotes(files, roots) {
   if (codexMode || !privacyPath) return;
@@ -6259,9 +6310,10 @@ async function readDuplicateGroups() {
 
 // Identical files show once, with a line saying how many other places hold the same content, so copies do not crowd out other answers.
 // Search asks for more rows than the limit first, then keeps `limit` distinct ones.
-async function search(query, limit, { collapse = false, paged = false, offset = 0 } = {}) {
-  if (paged) return pagedSearch(query, limit, offset);
-  const raw = await searchRaw(query, collapse ? Math.min(40, limit * 5) : limit);
+async function search(query, limit, { collapse = false, paged = false, offset = 0, rechecking = false } = {}) {
+  if (paged) return pagedSearch(query, limit, offset, rechecking);
+  let raw = await searchRaw(query, collapse ? Math.min(40, limit * 5) : limit);
+  if (rechecking) raw = await keepPassingHits(raw);
   if (!collapse) return raw;
   const { byPath, sizes } = await readDuplicateGroups();
   const stale = await editedSinceIndexed(raw.split('\n').map(line => line.match(/^\s*\d+\s+-?[0-9]+(?:\.[0-9]+)?\s+(.+)$/)?.[1]).filter(Boolean).map(shown => path.resolve(decodeIndexPath(shown))));
@@ -6283,6 +6335,18 @@ async function search(query, limit, { collapse = false, paged = false, offset = 
     entries.push(lines);
   }
   return [...entries.slice(0, limit).flat(), ...others].join('\n');
+}
+
+// Part 44: the engine's ranked lines with every hit that does not pass the current rules removed, and any other line that names it.
+async function keepPassingHits(raw) {
+  const lines = raw.split('\n');
+  const hitPath = line => line.match(/^\s*\d+\s+-?[0-9]+(?:\.[0-9]+)?\s+(.+)$/)?.[1];
+  const shown = [...new Set(lines.map(hitPath).filter(Boolean))];
+  if (codexMode || !privacyPath || !shown.length) return raw;
+  const passing = await passingCurrentRules(shown.map(item => path.resolve(decodeIndexPath(item))));
+  const dropped = shown.filter(item => !passing.has(path.resolve(decodeIndexPath(item))));
+  const kept = lines.filter(line => !dropped.some(item => line.includes(item)) && !dropped.some(item => line.includes(path.basename(decodeIndexPath(item)))));
+  return dropped.length ? [RECHECK_UNCHECKED_LINE, ...kept].join('\n') : kept.join('\n');
 }
 
 // Every hit starts with where it comes from: the path of the file, or "<App> > <folder> > <title>" for an app item.
@@ -6321,7 +6385,7 @@ function sectionsText(sections) {
   return `matched in section${sections.numbers.length === 1 ? '' : 's'} ${listed}${more > 0 ? ` and ${more} more` : ''} (of ${withCommas(sections.of)}, about ${withCommas(SECTION_CHARS)} characters each)`;
 }
 
-async function pagedSearch(query, limit, offset) {
+async function pagedSearch(query, limit, offset, rechecking = false) {
   const { byPath, sizes } = await readDuplicateGroups();
   const picked = []; const others = []; const seenGroups = new Set();
   let ftsIdentityBefore = null;
@@ -6369,7 +6433,8 @@ async function pagedSearch(query, limit, offset) {
   const privacy = await readPrivacy();
   const screened = new Map();
   if (!codexMode && privacyPath) {
-    const toScreen = picked.filter(hit => hit.excerpt && !['held', 'excluded'].includes(privacy.get(hit.resolved)?.status));
+    // During a re-check (Part 44) every hit is screened, with or without an excerpt, and only a hit that passed is shown at all.
+    const toScreen = picked.filter(hit => (hit.excerpt || rechecking) && !['held', 'excluded'].includes(privacy.get(hit.resolved)?.status));
     for (const hit of picked) if (!toScreen.includes(hit)) screened.set(hit.resolved, false);
     let nameAllowed = null;
     try { nameAllowed = await allowedByName(toScreen.map(hit => hit.resolved)); } catch { privacyScreenFailed = true; }
@@ -6390,7 +6455,7 @@ async function pagedSearch(query, limit, offset) {
           screened.set(hit.resolved, false);
           return;
         }
-        const excerptScreen = hit.excerpt === indexed ? indexedScreen : await screenTextAsync(hit.resolved, hit.excerpt, nameAllowed);
+        const excerptScreen = !hit.excerpt || hit.excerpt === indexed ? indexedScreen : await screenTextAsync(hit.resolved, hit.excerpt, nameAllowed);
         if (!excerptScreen.ok) {
           if (excerptScreen.held) hit.heldAtServe = true;
           privacyScreenHeld = privacyScreenHeld || !!excerptScreen.held;
@@ -6413,6 +6478,7 @@ async function pagedSearch(query, limit, offset) {
     }
   }
   // Part 16: a hit whose name or text is held is not shown at all: no path, name, title or excerpt. One plain sentence says that private files matched.
+  if (rechecking && !codexMode && privacyPath) for (const hit of picked) if (screened.get(hit.resolved) !== true) hit.heldAtServe = true;
   const heldCount = picked.filter(hit => hit.heldAtServe).length;
   for (let at = picked.length - 1; at >= 0; at--) if (picked[at].heldAtServe) picked.splice(at, 1);
   const stale = await editedSinceIndexed(picked.map(hit => hit.resolved));
@@ -6451,15 +6517,20 @@ async function pagedSearch(query, limit, offset) {
   while (shown > 1 && bytes(entries.slice(0, shown)) > MAX_PAGE_BYTES) shown--;
   if (shown < entries.length) end = picked[shown - 1].rank;
   // Results that span more than one page: the first page also carries the facts about all of them.
-  const overview = offset === 0 && total !== null && end < total ? await matchOverview(query, shown, total) : '';
+  const overview = !rechecking && offset === 0 && total !== null && end < total ? await matchOverview(query, shown, total) : '';
   const privacyNotice = [
-    ...(privacyScreenHeld || heldCount ? [PRIVATE_FILES_LINE] : []),
-    ...(privacyScreenFailed ? ['Privacy screen could not verify one or more indexed excerpts; those excerpts are withheld.'] : []),
+    ...(privacyScreenHeld || (heldCount && !rechecking) ? [PRIVATE_FILES_LINE] : []),
+    ...(rechecking && privacyScreenFailed ? [RECHECK_UNCHECKED_LINE] : []),
+    ...(privacyScreenFailed && !rechecking ? ['Privacy screen could not verify one or more indexed excerpts; those excerpts are withheld.'] : []),
   ];
   // Part 22 (ChatGPT only): the model's own habit is to open Notes or Reminders to "verify" what it was shown, which asks the user for computer access. One fact says where these results come from.
   const appCopyNotice = chatgptMode && picked.slice(0, shown).some(hit => { try { return !!appReaders?.mirrorLabel(hit.resolved, appContentRoot()); } catch { return false; } })
     ? ['Notes and Reminders results come from DataBrain\'s own saved copy of them, which DataBrain keeps current by itself.'] : [];
-  return [`Results ${offset + 1}-${end} of ${total ?? end}.`, ...(overview ? [overview] : []), ...privacyNotice, ...appCopyNotice, ...entries.slice(0, shown).flat(), ...others].join('\n');
+  // Part 44b: during the re-check the engine's totals include results that are not shown, so the header counts only what is on the page.
+  const header = rechecking
+    ? `${shown} result${shown === 1 ? '' : 's'} shown that passed the updated privacy rules.${total !== null && end < total ? ` Next page: offset ${end}.` : ''}`
+    : `Results ${offset + 1}-${end} of ${total ?? end}.`;
+  return [header, ...(overview ? [overview] : []), ...privacyNotice, ...appCopyNotice, ...entries.slice(0, shown).flat(), ...others].join('\n');
 }
 
 // Facts about ALL the matches of a query (not only the page): how many sit in each folder and each year (the year the file was last changed). Shown on
@@ -6559,7 +6630,7 @@ async function searchRaw(query, limit, { offset = 0, count = false, excerpts = f
   return output.join('\n');
 }
 
-async function abstainCheck(queries) {
+async function abstainCheck(queries, rechecking = false) {
   if (!Array.isArray(queries) || queries.length < 2 || queries.length > 3 ||
       queries.some(query => typeof query !== 'string' || !query.trim() || query.length > 500) ||
       new Set(queries.map(query => query.trim().toLowerCase())).size !== queries.length) {
@@ -6569,7 +6640,7 @@ async function abstainCheck(queries) {
   const topPaths = new Map();
   let anyStrongHit = false;
   for (const query of queries) {
-    const output = await search(query, 3, { collapse: true });
+    const output = await search(query, 3, { collapse: true, rechecking });
     const hits = output.split('\n').filter(line => /^\s*\d+\s+-?[0-9]+(?:\.[0-9]+)?\s+/.test(line));
     const paths = hits.map(line => line.match(/^\s*\d+\s+-?[0-9]+(?:\.[0-9]+)?\s+(.+)$/)[1]);
     paths.forEach(source => topPaths.set(source, (topPaths.get(source) || 0) + 1));
@@ -6674,13 +6745,17 @@ async function inPool(items, work) {
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(SCREEN_PARALLEL, items.length) }, async () => { while (next < items.length) { const item = items[next++]; await work(item); } }));
 }
+// Part 44b test hooks (ignored on a real home): make the name screen fail, one file's screen throw, or one file's indexed body be unreadable.
+const hookedFile = (name, file) => { const wanted = testHook(name); return Boolean(wanted) && path.basename(file) === wanted; };
 async function allowedByName(files) {
   if (!files.length) return new Set();
+  if (testHook('DATABRAIN_TEST_NAME_SCREEN_FAILS') === '1') throw new Error('The privacy screen failed on the current text of this source, so nothing is shown.');
   const perl = path.join(engine, 'bin', 'privacy.pl');
   try { return new Set((await runCaptured('/usr/bin/perl', [perl, 'filter'], files.map(file => `${file}\n`).join(''), { env: engineEnv() })).split('\n')); }
   catch { throw new Error('The privacy screen failed on the current text of this source, so nothing is shown.'); }
 }
 async function screenTextAsync(file, text, nameAllowed) {
+  if (hookedFile('DATABRAIN_TEST_SCREEN_THROWS', file)) throw new Error('The privacy screen failed on the current text of this source, so nothing is shown.');
   if (!nameAllowed.has(file)) return { held: 'its name or earlier decision' };
   const key = createHash('sha256').update(file).update('\0').update(text).digest('hex');
   const known = screenMemo.get(key);
@@ -6697,6 +6772,7 @@ async function screenTextAsync(file, text, nameAllowed) {
   return result;
 }
 async function indexedBodiesOfAsync(requested) {
+  if (hookedFile('DATABRAIN_TEST_NO_INDEXED_BODY', requested)) return null;
   const home = os.homedir();
   const stored = requested.startsWith(home + path.sep) ? `~${requested.slice(home.length)}` : requested;
   const db = path.join(mocDir, 'fts.db');
@@ -7033,15 +7109,17 @@ async function callToolInner(name, args) {
         if (args.offset !== undefined && !(Number.isInteger(args.offset) && args.offset >= 0)) return fail('offset must be a whole number, 0 or more.');
         const recheck = await privacyRecheckGate(); if (recheck) return resultText(recheck);
         const freshness = await freshnessNoteOnUse();   // changes are added first, then the answer
-        const [found, banner] = await Promise.all([search(args.query, limit, { collapse: true, paged: true, offset: args.offset ?? 0 }), setupUnfinishedBanner()]);
+        const rechecking = await recheckServing();
+        const [found, banner] = await Promise.all([search(args.query, limit, { collapse: true, paged: true, offset: args.offset ?? 0, rechecking }), setupUnfinishedBanner()]);
         const paused = pausedFoldersNote(await readState().catch(() => ({})));   // Part 39: a paused folder is named, the rest answers
-        return resultText(`${otherDatabrainNotice()}${freshnessFirst(freshness)}${banner}${paused}${found}`);
+        return resultText(`${otherDatabrainNotice()}${freshnessFirst(freshness)}${banner}${paused}${rechecking ? `${PRIVACY_RECHECK_FACT}\n` : ''}${found}`);
       }
       case 'databrain_abstain_check': {
         const recheck = await privacyRecheckGate(); if (recheck) return resultText(recheck);
         const freshness = await freshnessNoteOnUse();
-        const [checked, banner] = await Promise.all([abstainCheck(args.queries), setupUnfinishedBanner()]);
-        return resultText(`${otherDatabrainNotice()}${freshnessFirst(freshness)}${banner}${checked}`);
+        const rechecking = await recheckServing();
+        const [checked, banner] = await Promise.all([abstainCheck(args.queries, rechecking), setupUnfinishedBanner()]);
+        return resultText(`${otherDatabrainNotice()}${freshnessFirst(freshness)}${banner}${rechecking ? `${PRIVACY_RECHECK_FACT}\n` : ''}${checked}`);
       }
       case 'databrain_read': {
         const readPath = typeof args.path === 'string' && args.path.startsWith('~/')
