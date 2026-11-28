@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Linux / Windows WSL 2 stand-in for the BSD `stat -f FORMAT file...` forms used in bin/.
+# bin/compat.sh puts this first on PATH on Linux only; macOS never sees it.
+# Translates the BSD format to GNU `stat --printf` and makes ONE call for all files, so
+# `xargs stat` over thousands of files stays fast. Anything else goes to GNU stat unchanged.
+#   %p  BSD octal mode -> GNU hex mode. Only used as a change fingerprint, so stable is enough.
+#   %Sf BSD file flags -> "-" (what a Mac file with no flags prints). Linux has no iCloud
+#       "dataless" flag, so the dataless checks are simply always false here.
+real="${NB_TEST_STAT:-/usr/bin/stat}"
+if [ "${1:-}" != "-f" ] || [ "$#" -lt 3 ]; then exec "$real" "$@"; fi
+fmt="$(printf '%s' "$2" | sed -e 's/%Sf/-/g' -e 's/%Lp/%a/g' -e 's/%p/%f/g' -e 's/%m/%Y/g' \
+  -e 's/%z/%s/g' -e 's/%c/%Z/g' -e 's/%N/%n/g' -e 's/%t/\\t/g')"
+shift 2
+# BSD stat of /dev/fd/N describes the open file; GNU needs -L to follow that link.
+follow=""
+for f in "$@"; do case "$f" in /dev/fd/*) follow="-L" ;; esac; done
+exec "$real" $follow --printf="$fmt\n" -- "$@"

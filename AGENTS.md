@@ -2,7 +2,7 @@
 
 DataBrain for the ChatGPT desktop app (Mac) is installed by the person, not by the model. The
 guide is `ChatGPT app (Mac)/databrain-chatgpt-guide.html`; the installer source is
-`Terminal version (recommended)/setup/chatgpt/`.
+`Terminal version (recommended)/macOS/setup/chatgpt/`.
 
 ## Installation
 
@@ -13,8 +13,8 @@ guide is `ChatGPT app (Mac)/databrain-chatgpt-guide.html`; the installer source 
 - Never bypass macOS security checks, strip quarantine flags, or edit `~/.codex/config.toml`
   yourself. The installer backs that file up and changes only its own `[mcp_servers.databrain]`
   entry; it refuses to overwrite a different `databrain` entry.
-- The older Codex bundle in `Terminal version (recommended)/setup/codex/` is a separate route that was never released. Do not
-  use it for the ChatGPT app, and do not install anything from `Terminal version (recommended)/setup/codex/dist/`.
+- The older Codex bundle in `Terminal version (recommended)/macOS/setup/codex/` is a separate route that was never released. Do not
+  use it for the ChatGPT app, and do not install anything from `Terminal version (recommended)/macOS/setup/codex/dist/`.
 - Do not treat ChatGPT Work or ChatGPT web as a local MCP host. DataBrain runs as a local tool
   in the ChatGPT desktop app only.
 

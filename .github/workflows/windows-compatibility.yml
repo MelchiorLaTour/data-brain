@@ -6,16 +6,8 @@ on:
   pull_request:
 
 jobs:
-  windows-shims:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m unittest windows/tests/test_shims.py -v
-        working-directory: Terminal version (recommended)
-
+  # Windows runs DataBrain inside WSL 2 (Ubuntu), so a real Ubuntu machine is the test bed:
+  # the shared engine in macOS/bin must work there with no PATH tweaks (bin/compat.sh).
   wsl-compatible-scripts:
     runs-on: ubuntu-latest
     steps:
@@ -24,5 +16,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y ripgrep sqlite3
-      - run: python -m unittest windows/tests/test_wsl_compat.py -v
+      - run: python -m unittest discover -s Windows/tests -v
         working-directory: Terminal version (recommended)

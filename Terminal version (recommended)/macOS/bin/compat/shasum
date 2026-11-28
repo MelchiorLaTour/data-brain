@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Linux / Windows WSL 2: use the real shasum (ships with Perl) when present, else sha1sum.
+# bin/ only calls plain `shasum` (SHA-1 of stdin), which both print the same way.
+if [ -z "${NB_TEST_NO_SHASUM:-}" ]; then
+  for real in /usr/bin/shasum /bin/shasum; do [ -x "$real" ] && exec "$real" "$@"; done
+fi
+exec "${NB_TEST_SHA1SUM:-sha1sum}" "$@"

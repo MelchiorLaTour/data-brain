@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Linux / Windows WSL 2 stand-in for BSD `date -r EPOCH [+FORMAT]` (GNU `-r` means a reference
+# FILE, so it must be rewritten to `-d @EPOCH`). Every other form goes to GNU date unchanged.
+real="${NB_TEST_DATE:-/usr/bin/date}"
+if [ "${1:-}" = "-r" ] && [[ "${2:-}" =~ ^[0-9]+$ ]]; then
+  epoch="$2"; shift 2
+  exec "$real" -d "@$epoch" "$@"
+fi
+exec "$real" "$@"
