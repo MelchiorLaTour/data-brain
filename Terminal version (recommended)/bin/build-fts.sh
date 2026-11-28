@@ -146,9 +146,13 @@ copy_with_retries() {
   done
   return 1
 }
+# Part 44: the left-out file keeps a labels-only row (no text), so the search index has one entry per index row and the install audit's counts
+# agree (Mel's brain: 6,143 index entries, 6,142 in search, from one note that could not be read). Its signature is a marker that never
+# matches a real one, so every later build tries to read it again.
 skip_busy_file() {
   skipped_busy=$((skipped_busy + 1))
-  echo "build-fts: left out of this build (changed while being read, 3 tries); the next refresh reads it again: $1" >&2
+  left_out=1
+  echo "build-fts: left out of this build (changed or unreadable while being read, 3 tries); kept by its labels only, the next refresh reads it again: $1" >&2
   rm -f "$STAGE/body"
 }
 while IFS=$'\t' read -r sigv path title themes keywords; do
@@ -156,7 +160,7 @@ while IFS=$'\t' read -r sigv path title themes keywords; do
   real="${path/#\~/$HOME}"
   # index.tsv is mutable derived state; it cannot grant access to a file outside selected roots.
   is_approved_source_file "$real" || continue
-  bodyfile=""; sectioned=0; unreadable_text=0
+  bodyfile=""; sectioned=0; unreadable_text=0; left_out=0
   ext="${path##*.}"; ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
   if { [ "$ext" = "md" ] || [ "$ext" = "txt" ] || [ "$ext" = "markdown" ]; } && [ -f "$real" ]; then
     # A dataless source may use its previously indexed sidecar, but a locally present
@@ -167,21 +171,17 @@ while IFS=$'\t' read -r sigv path title themes keywords; do
     elif [ ! -r "$real" ]; then
       unreadable_text=1
     else
-      copy_with_retries copy_approved_source "$real" "$STAGE/body" || {
-        skip_busy_file "$path"
-        continue
-      }
-      bodyfile="$STAGE/body"
+      # a file that is no longer the approved plain file (swapped for a link, moved) gets no row at all, as before
+      if copy_with_retries copy_approved_source "$real" "$STAGE/body"; then bodyfile="$STAGE/body"; else skip_busy_file "$path"; is_approved_source_file "$real" || continue; fi
     fi
   fi
-  if [ -z "$bodyfile" ] && [ "$unreadable_text" -eq 0 ]; then
+  if [ -z "$bodyfile" ] && [ "$unreadable_text" -eq 0 ] && [ "$left_out" -eq 0 ]; then
     hash="$(printf '%s' "$path" | shasum | cut -c1-16)"
     sc="$EXTRACTED/$hash.txt"
     if [ -e "$sc" ] || [ -L "$sc" ]; then
-      copy_with_retries copy_verified_file "$sc" "$STAGE/body" || {
-        skip_busy_file "$path"
-        continue
-      }
+      copy_with_retries copy_verified_file "$sc" "$STAGE/body" || { skip_busy_file "$path"; is_approved_source_file "$real" || continue; }
+    fi
+    if [ "$left_out" -eq 0 ] && { [ -e "$sc" ] || [ -L "$sc" ]; }; then
       fingerprint="$(stat -f '%i:%z:%m:%c' "$real" 2>/dev/null || true)"
       # A very large extract (a textbook or manual, over NB_SEARCH_BODY_MAX_BYTES) is indexed in sections of about NB_SECTION_CHARS characters, one search
       # row each (all with this path, the first with the labels). Search folds them into one hit that says which sections matched. The same source and
@@ -215,6 +215,7 @@ while IFS=$'\t' read -r sigv path title themes keywords; do
     [ -n "$bodyfile" ] && sed 's/"/""/g' "$bodyfile" >> "$CSV"
     printf '",""\n' >> "$CSV"
   fi
+  [ "$left_out" -eq 1 ] && sigv="left-out"
   printf '%s,%s\n' "$(qfield "$path")" "$(qfield "$sigv")" >> "$SIGCSV"
   rm -f "$STAGE/body"
   rows=$((rows + 1))
@@ -296,5 +297,5 @@ else
   echo "fts mode: full"
 fi
 if [ "$skipped_busy" -gt 0 ]; then
-  echo "fts skipped: $skipped_busy file(s) changed while being read and were left out; the next refresh reads them again"
+  echo "fts skipped: $skipped_busy file(s) changed or could not be read and are searchable by name only for now; the next refresh reads them again"
 fi

@@ -1,5 +1,6 @@
 const RELEASES_API_ROOT = 'https://api.github.com/repos/MelchiorLaTour/data-brain/releases/tags/';
-const COMMIT_API_ROOT = 'https://api.github.com/repos/MelchiorLaTour/data-brain/commits/';
+// The git-object endpoint returns only the commit object; /commits/<sha> also returns every file diff.
+const COMMIT_API_ROOT = 'https://api.github.com/repos/MelchiorLaTour/data-brain/git/commits/';
 const GIT_REF_API_ROOT = 'https://api.github.com/repos/MelchiorLaTour/data-brain/git/ref/tags/';
 const TAG_API_ROOT = 'https://api.github.com/repos/MelchiorLaTour/data-brain/git/tags/';
 const REPOSITORY = 'https://github.com/MelchiorLaTour/data-brain.git';
@@ -69,7 +70,8 @@ export async function checkGitHubRelease({ manifest, packageInfo, build, fetchIm
     });
     if (response.status === 404) return { state: 'BLOCKED', detail: `No published GitHub release v${manifest.version} is available to compare with this installation.` };
     if (!response.ok) return { state: 'BLOCKED', detail: `GitHub tagged-release check returned HTTP ${response.status}.` };
-    const release = JSON.parse(await readBoundedText(response, 65536));
+    // Release notes and uploader profiles can be long; only tag, draft and asset names/URLs are read.
+    const release = JSON.parse(await readBoundedText(response, 1048576));
     if (release.tag_name !== expectedTag || !Array.isArray(release.assets)) {
       return { state: 'FAIL', detail: `GitHub release ${String(release.tag_name || 'has no tag')} does not match installed version ${version}.` };
     }
